@@ -13,11 +13,8 @@ export interface DsoState {
   showCh1: boolean;
   showCh2: boolean;
   showMath: boolean;
-  /** Seconds per horizontal division (10 divs total) */
   timePerDiv: number;
-  /** Volts per vertical division (8 divs total) */
   voltsPerDiv: number;
-  /** Center horizontal axis voltage */
   centerVoltage: number;
   triggerSource: 'fg' | 'ch1' | 'ch2';
   triggerSlope: 'rising' | 'falling';
@@ -110,19 +107,19 @@ interface OscilloscopeProps {
 }
 
 const TIME_DIV_OPTIONS = [
-  { label: '50 µs', val: 50e-6 },
-  { label: '100 µs', val: 100e-6 },
-  { label: '200 µs', val: 200e-6 },
-  { label: '500 µs', val: 500e-6 },
-  { label: '1 ms', val: 1e-3 },
-  { label: '2 ms', val: 2e-3 },
+  { label: '50 µs/div', val: 50e-6 },
+  { label: '100 µs/div', val: 100e-6 },
+  { label: '200 µs/div', val: 200e-6 },
+  { label: '500 µs/div', val: 500e-6 },
+  { label: '1 ms/div', val: 1e-3 },
+  { label: '2 ms/div', val: 2e-3 },
 ];
 
 const VOLT_DIV_OPTIONS = [
-  { label: '0.5 V', val: 0.5 },
-  { label: '1.0 V', val: 1.0 },
-  { label: '2.0 V', val: 2.0 },
-  { label: '5.0 V', val: 5.0 },
+  { label: '0.5 V/div', val: 0.5 },
+  { label: '1.0 V/div', val: 1.0 },
+  { label: '2.0 V/div', val: 2.0 },
+  { label: '5.0 V/div', val: 5.0 },
 ];
 
 type DragHandle = 'x1' | 'x2' | 'y1' | 'y2' | null;
@@ -146,6 +143,7 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [dragging, setDragging] = useState<DragHandle>(null);
+  const [dockTab, setDockTab] = useState<'scale' | 'cursors'>('cursors');
 
   const totalTimeSpan = dso.timePerDiv * 10;
   const tMin = -totalTimeSpan / 2;
@@ -174,7 +172,7 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     const cssW = Math.max(300, Math.floor(rect.width));
-    const cssH = Math.max(240, Math.floor(rect.height));
+    const cssH = Math.max(260, Math.floor(rect.height));
 
     if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
       canvas.width = Math.floor(cssW * dpr);
@@ -184,7 +182,6 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    // Deep phosphor screen
     const bgGrad = ctx.createRadialGradient(
       cssW * 0.5,
       cssH * 0.45,
@@ -200,7 +197,6 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
 
     const box = getPlotBox(cssW, cssH);
 
-    // Frame & 10x8 Graticule
     ctx.strokeStyle = '#1c3e4a';
     ctx.lineWidth = 1.2;
     ctx.strokeRect(box.x, box.y, box.w, box.h);
@@ -224,7 +220,6 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
       ctx.stroke();
     }
 
-    // Center axis sub-ticks
     ctx.strokeStyle = '#2c6475';
     ctx.lineWidth = 1;
     const midX = box.x + box.w / 2;
@@ -244,15 +239,20 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
       ctx.stroke();
     }
 
-    // ==================== X-Y LISSAJOUS MODE (EXP 5) ====================
+    // X-Y LISSAJOUS MODE
     if (dso.displayMode === 'xy') {
-      const xHalfSpan = Math.max(2.5, Math.ceil(Math.max(Math.abs(simulation.stats.ch1.vmax), Math.abs(simulation.stats.ch1.vmin)) * 1.25 * 2) / 2);
-      const yHalfSpan = Math.max(1.5, Math.ceil(Math.max(Math.abs(simulation.stats.ch2.vmax), Math.abs(simulation.stats.ch2.vmin)) * 1.4 * 2) / 2);
+      const xHalfSpan = Math.max(
+        2.5,
+        Math.ceil(Math.max(Math.abs(simulation.stats.ch1.vmax), Math.abs(simulation.stats.ch1.vmin)) * 1.25 * 2) / 2
+      );
+      const yHalfSpan = Math.max(
+        1.5,
+        Math.ceil(Math.max(Math.abs(simulation.stats.ch2.vmax), Math.abs(simulation.stats.ch2.vmin)) * 1.4 * 2) / 2
+      );
 
       const vxToPx = (vx: number) => box.x + ((vx + xHalfSpan) / (2 * xHalfSpan)) * box.w;
       const vyToPy = (vy: number) => box.y + ((yHalfSpan - vy) / (2 * yHalfSpan)) * box.h;
 
-      // Axis labels
       ctx.font = '10px "JetBrains Mono", monospace';
       ctx.fillStyle = '#648d9b';
       ctx.textAlign = 'right';
@@ -268,7 +268,6 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
         ctx.fillText(`${xVal.toFixed(1)}V`, box.x + (box.w * i) / 10, box.y + box.h + 7);
       }
 
-      // Draw reference slope Am = 0.5 dashed guide
       ctx.save();
       ctx.beginPath();
       ctx.rect(box.x, box.y, box.w, box.h);
@@ -283,7 +282,6 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Draw Lissajous (CH1 vs CH2) over central cycle
       const len = simulation.time.length;
       const s0 = Math.floor(len * 0.375);
       const s1 = Math.min(len - 1, Math.ceil(len * 0.625));
@@ -305,7 +303,7 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
       ctx.fillStyle = '#34d399';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(`X-Y LISSAJOUS · X: CH1 (${ch1Label}) · Y: CH2 (${ch2Label})`, box.x + 8, box.y + 6);
+      ctx.fillText(`X-Y LISSAJOUS · X: ${ch1Label} · Y: ${ch2Label}`, box.x + 8, box.y + 6);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = '#7dd3fc';
@@ -316,7 +314,7 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
       return;
     }
 
-    // ==================== Y-T TIME DOMAIN MODE ====================
+    // Y-T TIME DOMAIN MODE
     const tToX = (t: number) => box.x + ((t - tMin) / (tMax - tMin)) * box.w;
     const vToY = (v: number) => box.y + ((vMax - v) / (vMax - vMin)) * box.h;
 
@@ -347,16 +345,14 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
     ctx.textBaseline = 'middle';
     for (let j = 0; j <= 8; j += 2) {
       const vVal = vMax - (j / 8) * (vMax - vMin);
-      const gy = box.y + (box.h * j) / 8;
-      ctx.fillText(`${vVal.toFixed(1)}V`, box.x - 6, gy);
+      ctx.fillText(`${vVal.toFixed(1)}V`, box.x - 6, box.y + (box.h * j) / 8);
     }
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     for (let i = 0; i <= 10; i += 2) {
       const tMs = (tMin + (i / 10) * (tMax - tMin)) * 1000;
-      const gx = box.x + (box.w * i) / 10;
-      ctx.fillText(`${Math.abs(tMs) < 1e-6 ? '0' : tMs.toFixed(2)}ms`, gx, box.y + box.h + 7);
+      ctx.fillText(`${Math.abs(tMs) < 1e-6 ? '0' : tMs.toFixed(2)}ms`, box.x + (box.w * i) / 10, box.y + box.h + 7);
     }
 
     ctx.save();
@@ -506,7 +502,7 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
         ? 'CURSORS OFF'
         : dso.cursorMode === 'track'
           ? `TRACK: ${dso.trackSource.toUpperCase()}`
-          : 'MANUAL CURSORS (DRAG)',
+          : 'MANUAL CURSORS',
       box.x + box.w - 8,
       box.y + 6
     );
@@ -573,22 +569,15 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
 
   return (
     <div className="panel dso-panel">
-      {/* Instrument Header */}
+      {/* Clean Header */}
       <div className="dso-header">
         <div className="fg-brand">
           <span className="inst-badge dso-badge">DSO</span>
-          <div>
-            <div className="inst-title">ScientiFic 200 MHz Digital Storage Oscilloscope</div>
-            <div className="inst-sub">
-              CH1: <span className="c-ch1">{ch1Label}</span> · CH2:{' '}
-              <span className="c-ch2">{ch2Label}</span>
-              {dso.showMath && (
-                <>
-                  {' '}
-                  · Math: <span className="c-math">CH1−CH2</span>
-                </>
-              )}
-            </div>
+          <div className="dso-title-inline">
+            <span className="inst-title">200 MHz Oscilloscope</span>
+            <span className="dso-ch-summary">
+              <em className="c-ch1">CH1:{ch1Label}</em> · <em className="c-ch2">CH2:{ch2Label}</em>
+            </span>
           </div>
         </div>
 
@@ -597,30 +586,24 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
             <button
               className={`seg-btn ${dso.displayMode === 'yt' ? 'active' : ''}`}
               onClick={() => onChange({ displayMode: 'yt' })}
-              title="Time-Domain Y-T mode"
             >
               Y-T
             </button>
             <button
               className={`seg-btn ${dso.displayMode === 'xy' ? 'active' : ''}`}
               onClick={() => onChange({ displayMode: 'xy' })}
-              title="Lissajous X-Y mode (CH1 vs CH2)"
             >
               X-Y
             </button>
           </div>
-          <button
-            className="btn-ghost btn-sm"
-            onClick={onResetView}
-            title="Reset DSO scale to experiment default"
-          >
+          <button className="btn-ghost btn-sm" onClick={onResetView} title="Reset DSO scale">
             <RotateCcw size={13} />
           </button>
           <button
             className={`power-btn ${dso.running ? 'on' : 'paused'}`}
             onClick={() => onChange({ running: !dso.running })}
           >
-            {dso.running ? <Pause size={13} /> : <Play size={13} />}
+            {dso.running ? <Pause size={12} /> : <Play size={12} />}
             <span>{dso.running ? 'RUN' : 'STOP'}</span>
           </button>
         </div>
@@ -633,7 +616,7 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
         <div className="sim-alert sim-warn">{simulation.warnings[0]}</div>
       )}
 
-      {/* Phosphor Screen Canvas */}
+      {/* Hero Phosphor Canvas */}
       <div className="dso-screen-frame">
         <canvas
           ref={canvasRef}
@@ -645,318 +628,270 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
         />
       </div>
 
-      {/* Live Digital Cursor Readout Bar */}
-      <div className="dso-readout-bar">
-        <div className="readout-cell">
-          <span className="r-lbl c-x1">X1</span>
-          <span className="r-val">{(dso.x1 * 1000).toFixed(3)} ms</span>
-        </div>
-        <div className="readout-cell">
-          <span className="r-lbl c-x2">X2</span>
-          <span className="r-val">{(dso.x2 * 1000).toFixed(3)} ms</span>
-        </div>
-        <div className="readout-cell">
-          <span className="r-lbl">ΔX</span>
-          <span className="r-val">{dxMs.toFixed(3)} ms</span>
-        </div>
-        <div className="readout-cell">
-          <span className="r-lbl c-x1">Y1</span>
-          <span className="r-val">{effectiveY1.toFixed(3)} V</span>
-        </div>
-        <div className="readout-cell readout-highlight">
-          <span className="r-lbl c-x2">Y2</span>
-          <span className="r-val">{effectiveY2.toFixed(3)} V</span>
-        </div>
-        <div className="readout-cell">
-          <span className="r-lbl">ΔY</span>
-          <span className="r-val">{dyV.toFixed(3)} V</span>
-        </div>
-      </div>
-
-      {/* Experiment-Specific Quick-Align Helpers */}
-      <div className="dso-quick-bar">
-        <span className="quick-lbl">
-          <Crosshair size={12} /> Quick:
-        </span>
-        {experimentId === 'exp2' && (
-          <>
-            <button
-              className="mini-chip"
-              onClick={() =>
-                onChange({
-                  cursorMode: dso.cursorMode === 'off' ? 'manual' : dso.cursorMode,
-                  x1: 0,
-                  y1: 2.5,
-                })
-              }
-            >
-              Axes (X1=0, Y1=2.5V)
-            </button>
-            <button
-              className={`mini-chip ${Math.abs(dso.x2 - EXP2_TIMES.t1) < 1e-6 ? 'active' : ''}`}
-              onClick={() => onChange({ x2: EXP2_TIMES.t1 })}
-            >
-              t₁ (−0.4 ms)
-            </button>
-            <button
-              className={`mini-chip ${Math.abs(dso.x2 - EXP2_TIMES.t2) < 1e-6 ? 'active' : ''}`}
-              onClick={() => onChange({ x2: EXP2_TIMES.t2 })}
-            >
-              t₂ (+0.3 ms)
-            </button>
-          </>
-        )}
-        {experimentId === 'exp3' && (
-          <>
-            <button
-              className="mini-chip"
-              onClick={() => onChange({ centerVoltage: 0, voltsPerDiv: 1.0, showCh1: true, showCh2: true })}
-            >
-              Center 0V (1V/div)
-            </button>
-            <button
-              className="mini-chip"
-              onClick={() => onChange({ centerVoltage: 0.5, voltsPerDiv: 0.5, showCh1: false, showCh2: true })}
-            >
-              Zoom vo (0.5V/div)
-            </button>
-          </>
-        )}
-        {experimentId === 'exp4' && (
-          <>
-            <button
-              className="mini-chip"
-              onClick={() => onChange({ cursorMode: 'manual', y1: 0, y2: 4, centerVoltage: 2, voltsPerDiv: 1 })}
-            >
-              Y1=0V, Y2=4V (vs)
-            </button>
-            <button
-              className="mini-chip"
-              onClick={() => onChange({ cursorMode: 'manual', y1: 0, y2: 1, centerVoltage: 0.5, voltsPerDiv: 0.5 })}
-            >
-              Zoom vo (0–1V)
-            </button>
-          </>
-        )}
-        {experimentId === 'exp5' && (
-          <>
-            <button
-              className="mini-chip"
-              onClick={() =>
-                onChange({
-                  displayMode: 'yt',
-                  cursorMode: 'manual',
-                  y1: 0.2,
-                  y2: 1.8,
-                  x1: 0.00001,
-                  x2: 0.000251,
-                  centerVoltage: 2.0,
-                  voltsPerDiv: 1.0,
-                  timePerDiv: 0.0002,
-                })
-              }
-            >
-              Step Cursors (0.20V / 1.80V)
-            </button>
-            <button
-              className={`mini-chip ${dso.displayMode === 'xy' ? 'active' : ''}`}
-              onClick={() => onChange({ displayMode: dso.displayMode === 'xy' ? 'yt' : 'xy' })}
-            >
-              {dso.displayMode === 'xy' ? 'Back to Y-T' : 'X-Y Lissajous'}
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Front-Panel Control Deck */}
-      <div className="dso-controls-grid">
-        <div className="dso-control-card">
-          <div className="card-micro-title">
-            <SlidersHorizontal size={12} /> Channels & Timebase
+      {/* Slim Unified Readout Strip (Cursor Values + Key Live Metrics) */}
+      <div className="dso-telemetry-strip">
+        {dso.cursorMode !== 'off' && dso.displayMode === 'yt' ? (
+          <div className="telemetry-row">
+            <span><b className="c-x1">X1</b> {(dso.x1 * 1000).toFixed(3)}ms</span>
+            <span><b className="c-x2">X2</b> {(dso.x2 * 1000).toFixed(3)}ms</span>
+            <span><b>ΔX</b> {dxMs.toFixed(3)}ms</span>
+            <span className="tel-sep" />
+            <span><b className="c-x1">Y1</b> {effectiveY1.toFixed(3)}V</span>
+            <span className="tel-y2"><b className="c-x2">Y2</b> {effectiveY2.toFixed(3)}V</span>
+            <span><b>ΔY</b> {dyV.toFixed(3)}V</span>
           </div>
+        ) : null}
 
-          <div className="ch-toggle-row">
+        <div className="telemetry-row telemetry-meas">
+          <span>
+            <b className="c-ch1">CH1</b> {simulation.stats.ch1.vmin.toFixed(2)}→{simulation.stats.ch1.vmax.toFixed(2)}V ({simulation.stats.ch1.vpp.toFixed(2)}Vpp)
+          </span>
+          <span>
+            <b className="c-ch2">CH2</b> {simulation.stats.ch2.vmin.toFixed(3)}→{simulation.stats.ch2.vmax.toFixed(3)}V ({simulation.stats.ch2.vpp.toFixed(3)}Vpp)
+          </span>
+          {experimentId === 'exp5' && (
+            <span className="c-ok">
+              {simulation.riseTimeSec !== null
+                ? `tr ${(simulation.riseTimeSec * 1e6).toFixed(1)}µs · tf ${((simulation.fallTimeSec ?? 0) * 1e6).toFixed(1)}µs`
+                : `A=${simulation.gain.toFixed(3)} · G=${dbGain.toFixed(2)}dB · Δφ=${simulation.phaseDiffDeg?.toFixed(1) ?? '—'}°`}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Compact 2-Tab Control Dock (Eliminates Stacked Box Wall) */}
+      <div className="dso-dock">
+        <div className="dso-dock-tabs">
+          <button
+            className={`dock-tab ${dockTab === 'cursors' ? 'active' : ''}`}
+            onClick={() => setDockTab('cursors')}
+          >
+            <Crosshair size={13} />
+            <span>Cursors & Align</span>
+          </button>
+          <button
+            className={`dock-tab ${dockTab === 'scale' ? 'active' : ''}`}
+            onClick={() => setDockTab('scale')}
+          >
+            <SlidersHorizontal size={13} />
+            <span>Channels & Scale</span>
+          </button>
+
+          {/* Always-handy inline channel pills on the right */}
+          <div className="dock-ch-inline">
             <button
-              className={`ch-pill ch1 ${dso.showCh1 ? 'on' : ''}`}
+              className={`ch-dot-btn ch1 ${dso.showCh1 ? 'on' : ''}`}
               onClick={() => onChange({ showCh1: !dso.showCh1 })}
             >
-              CH1 ({ch1Label})
+              CH1
             </button>
             <button
-              className={`ch-pill ch2 ${dso.showCh2 ? 'on' : ''}`}
+              className={`ch-dot-btn ch2 ${dso.showCh2 ? 'on' : ''}`}
               onClick={() => onChange({ showCh2: !dso.showCh2 })}
             >
-              CH2 ({ch2Label})
+              CH2
             </button>
             <button
-              className={`ch-pill math ${dso.showMath ? 'on' : ''}`}
+              className={`ch-dot-btn math ${dso.showMath ? 'on' : ''}`}
               onClick={() => onChange({ showMath: !dso.showMath })}
             >
               MATH
             </button>
           </div>
-
-          <div className="scale-row">
-            <div className="scale-group">
-              <span className="fg-label">Time/Div</span>
-              <div className="chip-row">
-                {TIME_DIV_OPTIONS.map((o) => (
-                  <button
-                    key={o.label}
-                    className={`mini-chip ${Math.abs(dso.timePerDiv - o.val) < 1e-9 ? 'active' : ''}`}
-                    onClick={() => onChange({ timePerDiv: o.val })}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="scale-group">
-              <span className="fg-label">Volts/Div</span>
-              <div className="chip-row">
-                {VOLT_DIV_OPTIONS.map((o) => (
-                  <button
-                    key={o.label}
-                    className={`mini-chip ${Math.abs(dso.voltsPerDiv - o.val) < 1e-9 ? 'active' : ''}`}
-                    onClick={() => onChange({ voltsPerDiv: o.val })}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="dso-control-card">
-          <div className="card-micro-title">
-            <Crosshair size={12} /> Cursor Mode & Precision Steppers
-          </div>
-
-          <div className="cursor-mode-row">
-            <div className="seg-group compact">
-              {(['off', 'manual', 'track'] as CursorMode[]).map((m) => (
-                <button
-                  key={m}
-                  className={`seg-btn ${dso.cursorMode === m ? 'active' : ''}`}
-                  onClick={() => onChange({ cursorMode: m })}
-                >
-                  {m === 'off' ? 'Off' : m === 'manual' ? 'Manual' : 'Track'}
-                </button>
-              ))}
-            </div>
-
-            {dso.cursorMode === 'track' && (
+        {dockTab === 'cursors' ? (
+          <div className="dso-dock-body">
+            <div className="dock-row">
               <div className="seg-group compact">
-                {(['ch1', 'ch2', 'math'] as TraceSource[]).map((src) => (
+                {(['off', 'manual', 'track'] as CursorMode[]).map((m) => (
                   <button
-                    key={src}
-                    className={`seg-btn track-${src} ${dso.trackSource === src ? 'active' : ''}`}
-                    onClick={() => onChange({ trackSource: src })}
+                    key={m}
+                    className={`seg-btn ${dso.cursorMode === m ? 'active' : ''}`}
+                    onClick={() => onChange({ cursorMode: m })}
                   >
-                    {src.toUpperCase()}
+                    {m === 'off' ? 'Off' : m === 'manual' ? 'Manual' : 'Track'}
                   </button>
                 ))}
               </div>
+
+              {dso.cursorMode === 'track' && (
+                <div className="seg-group compact">
+                  {(['ch1', 'ch2', 'math'] as TraceSource[]).map((src) => (
+                    <button
+                      key={src}
+                      className={`seg-btn track-${src} ${dso.trackSource === src ? 'active' : ''}`}
+                      onClick={() => onChange({ trackSource: src })}
+                    >
+                      {src.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Context Quick-Align */}
+              <div className="dock-quick-pills">
+                {experimentId === 'exp2' && (
+                  <>
+                    <button className="mini-chip" onClick={() => onChange({ x1: 0, y1: 2.5 })}>
+                      Axes
+                    </button>
+                    <button
+                      className={`mini-chip ${Math.abs(dso.x2 - EXP2_TIMES.t1) < 1e-6 ? 'active' : ''}`}
+                      onClick={() => onChange({ x2: EXP2_TIMES.t1 })}
+                    >
+                      t₁ (−0.4ms)
+                    </button>
+                    <button
+                      className={`mini-chip ${Math.abs(dso.x2 - EXP2_TIMES.t2) < 1e-6 ? 'active' : ''}`}
+                      onClick={() => onChange({ x2: EXP2_TIMES.t2 })}
+                    >
+                      t₂ (+0.3ms)
+                    </button>
+                  </>
+                )}
+                {experimentId === 'exp3' && (
+                  <button
+                    className="mini-chip"
+                    onClick={() => onChange({ centerVoltage: 0.5, voltsPerDiv: 0.5, showCh1: false, showCh2: true })}
+                  >
+                    Zoom vo
+                  </button>
+                )}
+                {experimentId === 'exp4' && (
+                  <>
+                    <button className="mini-chip" onClick={() => onChange({ cursorMode: 'manual', y1: 0, y2: 4, centerVoltage: 2, voltsPerDiv: 1 })}>
+                      0–4V
+                    </button>
+                    <button className="mini-chip" onClick={() => onChange({ cursorMode: 'manual', y1: 0, y2: 1, centerVoltage: 0.5, voltsPerDiv: 0.5 })}>
+                      Zoom 0–1V
+                    </button>
+                  </>
+                )}
+                {experimentId === 'exp5' && (
+                  <button
+                    className="mini-chip"
+                    onClick={() =>
+                      onChange({
+                        displayMode: 'yt',
+                        cursorMode: 'manual',
+                        y1: 0.2,
+                        y2: 1.8,
+                        x1: 0.00001,
+                        x2: 0.000251,
+                        centerVoltage: 2.0,
+                        voltsPerDiv: 1.0,
+                        timePerDiv: 0.0002,
+                      })
+                    }
+                  >
+                    0.20V / 1.80V Step
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {dso.cursorMode !== 'off' && (
+              <div className="cursor-inputs-grid">
+                <label className="mini-num">
+                  <span className="c-x1">X1 (ms)</span>
+                  <input
+                    type="number"
+                    step={0.01}
+                    value={Number((dso.x1 * 1000).toFixed(3))}
+                    onChange={(e) => {
+                      const ms = parseFloat(e.target.value);
+                      if (Number.isFinite(ms)) onChange({ x1: ms / 1000 });
+                    }}
+                  />
+                </label>
+                <label className="mini-num">
+                  <span className="c-x2">X2 (ms)</span>
+                  <input
+                    type="number"
+                    step={0.01}
+                    value={Number((dso.x2 * 1000).toFixed(3))}
+                    onChange={(e) => {
+                      const ms = parseFloat(e.target.value);
+                      if (Number.isFinite(ms)) onChange({ x2: ms / 1000 });
+                    }}
+                  />
+                </label>
+                <label className="mini-num">
+                  <span className="c-x1">Y1 (V)</span>
+                  <input
+                    type="number"
+                    step={0.05}
+                    disabled={dso.cursorMode === 'track'}
+                    value={Number(effectiveY1.toFixed(3))}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (Number.isFinite(v)) onChange({ y1: v });
+                    }}
+                  />
+                </label>
+                <label className="mini-num">
+                  <span className="c-x2">Y2 (V)</span>
+                  <input
+                    type="number"
+                    step={0.02}
+                    disabled={dso.cursorMode === 'track'}
+                    value={Number(effectiveY2.toFixed(3))}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (Number.isFinite(v)) onChange({ y2: v });
+                    }}
+                  />
+                </label>
+              </div>
             )}
           </div>
+        ) : (
+          <div className="dso-dock-body">
+            <div className="dock-scale-grid">
+              <label className="mini-num">
+                <span>Timebase</span>
+                <select
+                  className="clean-select"
+                  value={dso.timePerDiv}
+                  onChange={(e) => onChange({ timePerDiv: parseFloat(e.target.value) })}
+                >
+                  {TIME_DIV_OPTIONS.map((o) => (
+                    <option key={o.label} value={o.val}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          {dso.cursorMode !== 'off' && (
-            <div className="cursor-inputs-grid">
               <label className="mini-num">
-                <span className="c-x1">X1 (ms)</span>
-                <input
-                  type="number"
-                  step={0.01}
-                  value={Number((dso.x1 * 1000).toFixed(3))}
-                  onChange={(e) => {
-                    const ms = parseFloat(e.target.value);
-                    if (Number.isFinite(ms)) onChange({ x1: ms / 1000 });
-                  }}
-                />
+                <span>Vertical Scale</span>
+                <select
+                  className="clean-select"
+                  value={dso.voltsPerDiv}
+                  onChange={(e) => onChange({ voltsPerDiv: parseFloat(e.target.value) })}
+                >
+                  {VOLT_DIV_OPTIONS.map((o) => (
+                    <option key={o.label} value={o.val}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </label>
+
               <label className="mini-num">
-                <span className="c-x2">X2 (ms)</span>
+                <span>Center Axis (V)</span>
                 <input
                   type="number"
-                  step={0.01}
-                  value={Number((dso.x2 * 1000).toFixed(3))}
-                  onChange={(e) => {
-                    const ms = parseFloat(e.target.value);
-                    if (Number.isFinite(ms)) onChange({ x2: ms / 1000 });
-                  }}
-                />
-              </label>
-              <label className="mini-num">
-                <span className="c-x1">Y1 (V)</span>
-                <input
-                  type="number"
-                  step={0.05}
-                  disabled={dso.cursorMode === 'track'}
-                  value={Number(effectiveY1.toFixed(3))}
+                  step={0.5}
+                  value={dso.centerVoltage}
                   onChange={(e) => {
                     const v = parseFloat(e.target.value);
-                    if (Number.isFinite(v)) onChange({ y1: v });
-                  }}
-                />
-              </label>
-              <label className="mini-num">
-                <span className="c-x2">Y2 (V)</span>
-                <input
-                  type="number"
-                  step={0.02}
-                  disabled={dso.cursorMode === 'track'}
-                  value={Number(effectiveY2.toFixed(3))}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (Number.isFinite(v)) onChange({ y2: v });
+                    if (Number.isFinite(v)) onChange({ centerVoltage: v });
                   }}
                 />
               </label>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Auto Measurement Strip */}
-      <div className="auto-meas-strip">
-        <div className="meas-pill">
-          <span className="c-ch1">CH1</span>
-          <span>Min {simulation.stats.ch1.vmin.toFixed(3)}V</span>
-          <span>Max {simulation.stats.ch1.vmax.toFixed(3)}V</span>
-          <span>Vpp {simulation.stats.ch1.vpp.toFixed(3)}V</span>
-        </div>
-        <div className="meas-pill">
-          <span className="c-ch2">CH2</span>
-          <span>Min {simulation.stats.ch2.vmin.toFixed(3)}V</span>
-          <span>Max {simulation.stats.ch2.vmax.toFixed(3)}V</span>
-          <span>Vpp {simulation.stats.ch2.vpp.toFixed(3)}V</span>
-        </div>
-        {experimentId === 'exp2' && (
-          <div className="meas-pill">
-            <span className="c-math">MATH</span>
-            <span>Min {simulation.stats.math.vmin.toFixed(3)}V</span>
-            <span>Max {simulation.stats.math.vmax.toFixed(3)}V</span>
-            <span>Vpp {simulation.stats.math.vpp.toFixed(3)}V</span>
-          </div>
-        )}
-        {experimentId === 'exp5' && (
-          <div className="meas-pill exp5-meas">
-            <span className="c-ok">RC</span>
-            {simulation.riseTimeSec !== null ? (
-              <>
-                <span>tr {(simulation.riseTimeSec * 1e6).toFixed(1)}µs</span>
-                <span>tf {((simulation.fallTimeSec ?? 0) * 1e6).toFixed(1)}µs</span>
-                <span>2.2τ = 242µs</span>
-              </>
-            ) : (
-              <>
-                <span>A = {simulation.gain.toFixed(3)}</span>
-                <span>G = {dbGain.toFixed(2)} dB</span>
-                <span>Δφ = {simulation.phaseDiffDeg?.toFixed(1) ?? '—'}°</span>
-              </>
-            )}
           </div>
         )}
       </div>

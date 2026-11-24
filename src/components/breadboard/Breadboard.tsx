@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ALL_HOLES,
   BB_COLS,
@@ -29,10 +29,11 @@ import {
 import {
   ArrowLeftRight,
   Cable,
+  ChevronDown,
   Cpu,
   MousePointer2,
-  RotateCcw,
   Trash2,
+  X,
   Zap,
 } from 'lucide-react';
 
@@ -106,6 +107,8 @@ export const Breadboard: React.FC<BreadboardProps> = ({
   const [pendingPin1, setPendingPin1] = useState<HoleId | null>(null);
   const [hoveredHole, setHoveredHole] = useState<HoleId | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [probeMenuOpen, setProbeMenuOpen] = useState(false);
+  const probeMenuRef = useRef<HTMLDivElement | null>(null);
 
   const selectedComp = useMemo(
     () => components.find((c) => c.id === selectedId) ?? null,
@@ -124,6 +127,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
       if (e.key === 'Escape') {
         setPendingPin1(null);
         setTool('select');
+        setProbeMenuOpen(false);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         e.preventDefault();
         onDeleteComponent(selectedId);
@@ -133,6 +137,18 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedId, onDeleteComponent]);
+
+  // Close probe dropdown when clicking outside
+  useEffect(() => {
+    if (!probeMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (probeMenuRef.current && !probeMenuRef.current.contains(e.target as Node)) {
+        setProbeMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [probeMenuOpen]);
 
   const highlightSets = useMemo(() => {
     if (!hoveredHole) {
@@ -188,10 +204,10 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     const net = simulation.holeToNet[hoveredHole];
     let nodeTag = '';
     if (detectedNodes && net !== undefined && net >= 0) {
-      if (net === detectedNodes.gnd) nodeTag = 'GND Bus';
-      else if (detectedNodes.a !== undefined && net === detectedNodes.a) nodeTag = 'Input Node';
+      if (net === detectedNodes.gnd) nodeTag = 'GND';
+      else if (detectedNodes.a !== undefined && net === detectedNodes.a) nodeTag = 'Input';
       else if (detectedNodes.b !== undefined && net === detectedNodes.b) nodeTag = 'Node b';
-      else if (detectedNodes.c !== undefined && net === detectedNodes.c) nodeTag = 'Node c (KCL)';
+      else if (detectedNodes.c !== undefined && net === detectedNodes.c) nodeTag = 'Node c';
       else if (detectedNodes.d !== undefined && net === detectedNodes.d) nodeTag = 'Node d';
       else if (detectedNodes.vo !== undefined && net === detectedNodes.vo) nodeTag = 'Output vo';
     }
@@ -208,7 +224,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     }
     return {
       hole: hoveredHole,
-      net: net !== undefined && net >= 0 ? `Net ${net}` : 'Unwired',
+      net: net !== undefined && net >= 0 ? `Net ${net}` : 'Open',
       nodeTag,
       vRange,
     };
@@ -234,9 +250,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           className: `bb-comp ${isSelected ? 'bb-comp-selected' : ''}`,
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation();
-            if (tool === 'select') {
-              setSelectedId(comp.id);
-            }
+            if (tool === 'select') setSelectedId(comp.id);
           },
         };
 
@@ -277,61 +291,19 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           <circle cx={p2.x} cy={p2.y} r={3.4} fill="#e2e8f0" stroke="#475569" strokeWidth={1} />
           <g transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
             {isSelected && (
-              <rect
-                x={-bodyLen / 2 - 4}
-                y={-bodyH / 2 - 4}
-                width={bodyLen + 8}
-                height={bodyH + 8}
-                rx={7}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth={2.2}
-              />
+              <rect x={-bodyLen / 2 - 4} y={-bodyH / 2 - 4} width={bodyLen + 8} height={bodyH + 8} rx={7} fill="none" stroke="#38bdf8" strokeWidth={2.2} />
             )}
-            <rect
-              x={-bodyLen / 2}
-              y={-bodyH / 2}
-              width={bodyLen}
-              height={bodyH}
-              rx={5}
-              fill="#60a5fa"
-              stroke="#1e40af"
-              strokeWidth={1.1}
-            />
+            <rect x={-bodyLen / 2} y={-bodyH / 2} width={bodyLen} height={bodyH} rx={5} fill="#60a5fa" stroke="#1e40af" strokeWidth={1.1} />
             <rect x={-bodyLen * 0.34} y={-bodyH / 2 + 0.6} width={3.5} height={bodyH - 1.2} fill={bands[0]} />
             <rect x={-bodyLen * 0.14} y={-bodyH / 2 + 0.6} width={3.5} height={bodyH - 1.2} fill={bands[1]} />
             <rect x={bodyLen * 0.06} y={-bodyH / 2 + 0.6} width={3.5} height={bodyH - 1.2} fill={bands[2]} />
             <rect x={bodyLen * 0.27} y={-bodyH / 2 + 0.6} width={3.1} height={bodyH - 1.2} fill={bands[3]} />
-            <rect
-              x={-bodyLen / 2 + 2}
-              y={-bodyH / 2 + 1.5}
-              width={bodyLen - 4}
-              height={3}
-              rx={1.5}
-              fill="rgba(255,255,255,0.32)"
-            />
+            <rect x={-bodyLen / 2 + 2} y={-bodyH / 2 + 1.5} width={bodyLen - 4} height={3} rx={1.5} fill="rgba(255,255,255,0.32)" />
           </g>
           {!isGhost && (
             <g transform={`translate(${midX}, ${midY - (isVertical ? 0 : 14)})`}>
-              <rect
-                x={isVertical ? 12 : -pillW / 2}
-                y={-9}
-                width={pillW}
-                height={15}
-                rx={4}
-                fill="rgba(15,23,42,0.9)"
-                stroke={isSelected ? '#38bdf8' : 'rgba(148,163,184,0.35)'}
-                strokeWidth={1}
-              />
-              <text
-                x={isVertical ? 12 + pillW / 2 : 0}
-                y={2}
-                textAnchor="middle"
-                fontSize={8.8}
-                fontWeight={600}
-                fontFamily="JetBrains Mono, monospace"
-                fill="#f8fafc"
-              >
+              <rect x={isVertical ? 12 : -pillW / 2} y={-9} width={pillW} height={15} rx={4} fill="rgba(15,23,42,0.9)" stroke={isSelected ? '#38bdf8' : 'rgba(148,163,184,0.35)'} strokeWidth={1} />
+              <text x={isVertical ? 12 + pillW / 2 : 0} y={2} textAnchor="middle" fontSize={8.8} fontWeight={600} fontFamily="JetBrains Mono, monospace" fill="#f8fafc">
                 {txt}
               </text>
             </g>
@@ -351,51 +323,16 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           <circle cx={p2.x} cy={p2.y} r={3.4} fill="#e2e8f0" stroke="#475569" strokeWidth={1} />
           <g transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
             {isSelected && (
-              <rect
-                x={-bodyLen / 2 - 4}
-                y={-bodyH / 2 - 4}
-                width={bodyLen + 8}
-                height={bodyH + 8}
-                rx={6}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth={2.2}
-              />
+              <rect x={-bodyLen / 2 - 4} y={-bodyH / 2 - 4} width={bodyLen + 8} height={bodyH + 8} rx={6} fill="none" stroke="#38bdf8" strokeWidth={2.2} />
             )}
-            <rect
-              x={-bodyLen / 2}
-              y={-bodyH / 2}
-              width={bodyLen}
-              height={bodyH}
-              rx={3}
-              fill="#18181b"
-              stroke="#52525b"
-              strokeWidth={1.1}
-            />
+            <rect x={-bodyLen / 2} y={-bodyH / 2} width={bodyLen} height={bodyH} rx={3} fill="#18181b" stroke="#52525b" strokeWidth={1.1} />
             <rect x={bodyLen / 2 - 9} y={-bodyH / 2 + 0.6} width={5.2} height={bodyH - 1.2} fill="#e2e8f0" />
             <path d="M -8 -3.5 L -1 0 L -8 3.5 Z" fill="#94a3b8" opacity={0.85} />
           </g>
           {!isGhost && (
             <g transform={`translate(${midX}, ${midY - (isVertical ? 0 : 15)})`}>
-              <rect
-                x={isVertical ? 12 : -36}
-                y={-9}
-                width={72}
-                height={15}
-                rx={4}
-                fill="rgba(15,23,42,0.9)"
-                stroke={isSelected ? '#38bdf8' : 'rgba(226,232,240,0.4)'}
-                strokeWidth={1}
-              />
-              <text
-                x={isVertical ? 48 : 0}
-                y={2}
-                textAnchor="middle"
-                fontSize={8.5}
-                fontWeight={600}
-                fontFamily="JetBrains Mono, monospace"
-                fill="#f8fafc"
-              >
+              <rect x={isVertical ? 12 : -36} y={-9} width={72} height={15} rx={4} fill="rgba(15,23,42,0.9)" stroke={isSelected ? '#38bdf8' : 'rgba(226,232,240,0.4)'} strokeWidth={1} />
+              <text x={isVertical ? 48 : 0} y={2} textAnchor="middle" fontSize={8.5} fontWeight={600} fontFamily="JetBrains Mono, monospace" fill="#f8fafc">
                 1N4007 (A→K)
               </text>
             </g>
@@ -416,16 +353,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
         <circle cx={p2.x} cy={p2.y} r={3.4} fill="#e2e8f0" stroke="#475569" strokeWidth={1} />
         <g transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
           {isSelected && (
-            <rect
-              x={-capW / 2 - 4}
-              y={-capH / 2 - 4}
-              width={capW + 8}
-              height={capH + 8}
-              rx={5}
-              fill="none"
-              stroke="#38bdf8"
-              strokeWidth={2.2}
-            />
+            <rect x={-capW / 2 - 4} y={-capH / 2 - 4} width={capW + 8} height={capH + 8} rx={5} fill="none" stroke="#38bdf8" strokeWidth={2.2} />
           )}
           <rect x={-capW / 2} y={-capH / 2} width={capW} height={capH} rx={4} fill="#d97706" stroke="#92400e" strokeWidth={1.3} />
           <rect x={-capW / 2 + 2} y={-capH / 2 + 2} width={capW - 4} height={capH - 4} rx={2.5} fill="#f59e0b" />
@@ -435,25 +363,8 @@ export const Breadboard: React.FC<BreadboardProps> = ({
         </g>
         {!isGhost && (
           <g transform={`translate(${midX}, ${midY - (isVertical ? 0 : 17)})`}>
-            <rect
-              x={isVertical ? 14 : -capPillW / 2}
-              y={-9}
-              width={capPillW}
-              height={15}
-              rx={4}
-              fill="rgba(15,23,42,0.9)"
-              stroke={isSelected ? '#38bdf8' : 'rgba(245,158,11,0.5)'}
-              strokeWidth={1}
-            />
-            <text
-              x={isVertical ? 14 + capPillW / 2 : 0}
-              y={2}
-              textAnchor="middle"
-              fontSize={8.8}
-              fontWeight={600}
-              fontFamily="JetBrains Mono, monospace"
-              fill="#fde68a"
-            >
+            <rect x={isVertical ? 14 : -capPillW / 2} y={-9} width={capPillW} height={15} rx={4} fill="rgba(15,23,42,0.9)" stroke={isSelected ? '#38bdf8' : 'rgba(245,158,11,0.5)'} strokeWidth={1} />
+            <text x={isVertical ? 14 + capPillW / 2 : 0} y={2} textAnchor="middle" fontSize={8.8} fontWeight={600} fontFamily="JetBrains Mono, monospace" fill="#fde68a">
               {capTxt}
             </text>
           </g>
@@ -488,66 +399,72 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     ? ['fgPos', 'ch1Pos', 'ch2Pos', 'rpsPos', 'rpsNeg', 'fgGnd']
     : ['fgPos', 'ch1Pos', 'ch2Pos', 'fgGnd'];
 
+  const activeProbeLabel = tool.startsWith('probe:')
+    ? PROBE_META[tool.slice(6) as ProbeId].short
+    : null;
+
   return (
     <div className="panel breadboard-panel">
-      {/* Component Palette & Probe Bar */}
+      {/* Single Clean Toolbar: Left = Parts + Probes Dropdown · Right = Experiment Controls */}
       <div className="bb-toolbar">
-        <div className="bb-tool-group" role="toolbar" aria-label="Breadboard components">
-          <button
-            className={`tool-btn ${tool === 'select' ? 'active' : ''}`}
-            onClick={() => {
-              setTool('select');
-              setPendingPin1(null);
-            }}
-            title="Select, inspect, or edit components (Esc)"
-          >
-            <MousePointer2 size={14} />
-            <span>Select</span>
-          </button>
-          <button
-            className={`tool-btn ${tool === 'resistor' ? 'active' : ''}`}
-            onClick={() => {
-              setTool('resistor');
-              setPendingPin1(null);
-            }}
-            title="Place Resistor (click 2 holes)"
-          >
-            <span className="tool-chip resistor-chip" />
-            <span>Resistor</span>
-          </button>
-          <button
-            className={`tool-btn ${tool === 'diode' ? 'active' : ''}`}
-            onClick={() => {
-              setTool('diode');
-              setPendingPin1(null);
-            }}
-            title="Place 1N4007 Diode (Anode → Cathode)"
-          >
-            <span className="tool-chip diode-chip" />
-            <span>1N4007</span>
-          </button>
-          <button
-            className={`tool-btn ${tool === 'capacitor' ? 'active' : ''}`}
-            onClick={() => {
-              setTool('capacitor');
-              setPendingPin1(null);
-            }}
-            title="Place Capacitor (click 2 holes)"
-          >
-            <span className="tool-chip cap-chip" />
-            <span>Cap</span>
-          </button>
-          <button
-            className={`tool-btn ${tool === 'wire' ? 'active' : ''}`}
-            onClick={() => {
-              setTool('wire');
-              setPendingPin1(null);
-            }}
-            title="Draw Jumper Wire (click 2 holes)"
-          >
-            <Cable size={14} />
-            <span>Wire</span>
-          </button>
+        <div className="bb-tool-group" role="toolbar" aria-label="Breadboard tools">
+          <div className="seg-group compact">
+            <button
+              className={`seg-btn ${tool === 'select' ? 'active' : ''}`}
+              onClick={() => {
+                setTool('select');
+                setPendingPin1(null);
+              }}
+              title="Select & edit parts (Esc)"
+            >
+              <MousePointer2 size={13} />
+              <span>Select</span>
+            </button>
+            <button
+              className={`seg-btn ${tool === 'resistor' ? 'active' : ''}`}
+              onClick={() => {
+                setTool('resistor');
+                setPendingPin1(null);
+              }}
+              title="Place Resistor"
+            >
+              <span className="tool-chip resistor-chip" />
+              <span>R</span>
+            </button>
+            <button
+              className={`seg-btn ${tool === 'diode' ? 'active' : ''}`}
+              onClick={() => {
+                setTool('diode');
+                setPendingPin1(null);
+              }}
+              title="Place 1N4007 Diode"
+            >
+              <span className="tool-chip diode-chip" />
+              <span>Diode</span>
+            </button>
+            <button
+              className={`seg-btn ${tool === 'capacitor' ? 'active' : ''}`}
+              onClick={() => {
+                setTool('capacitor');
+                setPendingPin1(null);
+              }}
+              title="Place Capacitor"
+            >
+              <span className="tool-chip cap-chip" />
+              <span>Cap</span>
+            </button>
+            <button
+              className={`seg-btn ${tool === 'wire' ? 'active' : ''}`}
+              onClick={() => {
+                setTool('wire');
+                setPendingPin1(null);
+              }}
+              title="Draw Jumper Wire"
+            >
+              <Cable size={13} />
+              <span>Wire</span>
+            </button>
+          </div>
 
           {tool === 'wire' && (
             <div className="wire-palette" aria-label="Wire color">
@@ -562,73 +479,45 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               ))}
             </div>
           )}
+
+          {/* Compact Probes Dropdown */}
+          <div className="popover-wrap" ref={probeMenuRef}>
+            <button
+              className={`btn-secondary btn-sm ${activeProbeLabel ? 'btn-accent-outline' : ''}`}
+              onClick={() => setProbeMenuOpen((o) => !o)}
+              title="Move BNC / Power Supply clips"
+            >
+              <span>{activeProbeLabel ? `Move ${activeProbeLabel}` : 'Probes'}</span>
+              <ChevronDown size={13} />
+            </button>
+            {probeMenuOpen && (
+              <div className="popover-menu">
+                <div className="popover-heading">Move clip to any hole</div>
+                {placeableProbes.map((pid) => {
+                  const meta = PROBE_META[pid];
+                  return (
+                    <button
+                      key={pid}
+                      className={`popover-item ${tool === `probe:${pid}` ? 'active' : ''}`}
+                      onClick={() => {
+                        setTool(`probe:${pid}`);
+                        setPendingPin1(null);
+                        setProbeMenuOpen(false);
+                      }}
+                    >
+                      <span className="probe-dot" style={{ background: meta.color }} />
+                      <span>{meta.label}</span>
+                      <span className="mono-muted">{probes[pid]?.toUpperCase() ?? 'NC'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="bb-probe-group">
-          {placeableProbes.map((pid) => {
-            const meta = PROBE_META[pid];
-            const active = tool === `probe:${pid}`;
-            return (
-              <button
-                key={pid}
-                className={`probe-place-btn ${active ? 'active' : ''}`}
-                style={{
-                  borderColor: active ? meta.color : undefined,
-                  boxShadow: active ? `0 0 0 1px ${meta.color}` : undefined,
-                }}
-                onClick={() => {
-                  setTool(active ? 'select' : `probe:${pid}`);
-                  setPendingPin1(null);
-                }}
-                title={`Click any hole to move ${meta.label} (${probes[pid] ?? 'unconnected'})`}
-              >
-                <span className="probe-dot" style={{ background: meta.color }} />
-                <span>{meta.short}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Experiment-Specific Quick Controls Bar (e.g. CH2 Node b/c/d, Exp 3 Variants, Exp 4 Loads, Exp 5 Freqs) */}
-      {experimentControls && <div className="bb-exp-bar">{experimentControls}</div>}
-
-      {/* Placement Hint Strip */}
-      <div className="bb-status-bar">
-        <div className="bb-hint">
-          {tool.startsWith('probe:') ? (
-            <span className="hint-active">
-              <Zap size={13} /> Click any breadboard hole to clip{' '}
-              <strong>{PROBE_META[tool.slice(6) as ProbeId].label}</strong> (Esc to cancel)
-            </span>
-          ) : tool !== 'select' ? (
-            <span className="hint-active">
-              <Cpu size={13} />{' '}
-              {pendingPin1
-                ? `Pin 1 set at ${pendingPin1.toUpperCase()} — click Pin 2 to finish ${tool === 'diode' ? 'Cathode (K)' : tool}`
-                : tool === 'diode'
-                  ? 'Click Anode (A) hole first, then Cathode (K) hole'
-                  : `Click Pin 1 hole, then Pin 2 hole to place ${tool}`}
-            </span>
-          ) : (
-            <span>
-              Hover any hole to trace strips · Click any part to edit value / flip polarity / delete
-            </span>
-          )}
-        </div>
-
-        <div className="bb-live-hover">
-          {hoveredInfo ? (
-            <>
-              <span className="mono-badge">{hoveredInfo.hole.toUpperCase()}</span>
-              <span className="mono-muted">{hoveredInfo.net}</span>
-              {hoveredInfo.nodeTag && <span className="node-pill">{hoveredInfo.nodeTag}</span>}
-              {hoveredInfo.vRange && <span className="mono-volt">{hoveredInfo.vRange}</span>}
-            </>
-          ) : (
-            <span className="mono-muted">30-col Breadboard · Exact MNA Live</span>
-          )}
-        </div>
+        {/* Inline Experiment Controls */}
+        {experimentControls && <div className="bb-exp-inline">{experimentControls}</div>}
       </div>
 
       {/* Interactive SVG Breadboard */}
@@ -640,26 +529,8 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             if (tool === 'select') setSelectedId(null);
           }}
         >
-          <rect
-            x={8}
-            y={8}
-            width={BB_VIEWBOX.width - 16}
-            height={BB_VIEWBOX.height - 16}
-            rx={12}
-            fill="#f4efe4"
-            stroke="#c7beab"
-            strokeWidth={2.5}
-          />
-          <rect
-            x={16}
-            y={15}
-            width={BB_VIEWBOX.width - 32}
-            height={BB_VIEWBOX.height - 30}
-            rx={8}
-            fill="#f7f3ea"
-            stroke="#ded6c5"
-            strokeWidth={1.2}
-          />
+          <rect x={8} y={8} width={BB_VIEWBOX.width - 16} height={BB_VIEWBOX.height - 16} rx={12} fill="#f4efe4" stroke="#c7beab" strokeWidth={2.5} />
+          <rect x={16} y={15} width={BB_VIEWBOX.width - 32} height={BB_VIEWBOX.height - 30} rx={8} fill="#f7f3ea" stroke="#ded6c5" strokeWidth={1.2} />
 
           {/* Top Power Rails */}
           <line x1={46} y1={19} x2={BB_VIEWBOX.width - 46} y2={19} stroke="#dc2626" strokeWidth={2.2} opacity={0.85} />
@@ -677,30 +548,12 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           <text x={BB_VIEWBOX.width - 36} y={344} fontSize={13} fontWeight={700} fill="#dc2626" fontFamily="JetBrains Mono, monospace">+</text>
           <text x={BB_VIEWBOX.width - 36} y={366} fontSize={14} fontWeight={700} fill="#2563eb" fontFamily="JetBrains Mono, monospace">−</text>
 
-          <text
-            x={BB_VIEWBOX.width / 2}
-            y={383}
-            textAnchor="middle"
-            fontSize={8.5}
-            fontWeight={700}
-            letterSpacing="0.12em"
-            fill="#475569"
-            fontFamily="JetBrains Mono, monospace"
-          >
+          <text x={BB_VIEWBOX.width / 2} y={383} textAnchor="middle" fontSize={8.5} fontWeight={700} letterSpacing="0.12em" fill="#475569" fontFamily="JetBrains Mono, monospace">
             GND / COM BUS (COMMON REFERENCE NODE 0)
           </text>
 
           {/* Center IC Trench */}
-          <rect
-            x={36}
-            y={188}
-            width={BB_VIEWBOX.width - 72}
-            height={14}
-            rx={4}
-            fill="#e5decb"
-            stroke="#cfc6b1"
-            strokeWidth={1}
-          />
+          <rect x={36} y={188} width={BB_VIEWBOX.width - 72} height={14} rx={4} fill="#e5decb" stroke="#cfc6b1" strokeWidth={1} />
 
           {/* Column Numbers */}
           {Array.from({ length: BB_COLS }, (_, idx) => {
@@ -709,70 +562,41 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             const major = col === 1 || col % 5 === 0;
             return (
               <g key={`col-${col}`}>
-                <text x={x} y={74} textAnchor="middle" fontSize={major ? 9.5 : 8} fontWeight={major ? 700 : 500} fill={major ? '#475569' : '#94a3b8'} fontFamily="JetBrains Mono, monospace">
-                  {col}
-                </text>
-                <text x={x} y={322} textAnchor="middle" fontSize={major ? 9.5 : 8} fontWeight={major ? 700 : 500} fill={major ? '#475569' : '#94a3b8'} fontFamily="JetBrains Mono, monospace">
-                  {col}
-                </text>
+                <text x={x} y={74} textAnchor="middle" fontSize={major ? 9.5 : 8} fontWeight={major ? 700 : 500} fill={major ? '#475569' : '#94a3b8'} fontFamily="JetBrains Mono, monospace">{col}</text>
+                <text x={x} y={322} textAnchor="middle" fontSize={major ? 9.5 : 8} fontWeight={major ? 700 : 500} fill={major ? '#475569' : '#94a3b8'} fontFamily="JetBrains Mono, monospace">{col}</text>
               </g>
             );
           })}
 
           {/* Row Labels */}
-          {TOP_ROWS.map((r) => (
-            <g key={`row-${r}`}>
-              <text x={28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
-              <text x={BB_VIEWBOX.width - 28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
-            </g>
-          ))}
-          {BOT_ROWS.map((r) => (
+          {[...TOP_ROWS, ...BOT_ROWS].map((r) => (
             <g key={`row-${r}`}>
               <text x={28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
               <text x={BB_VIEWBOX.width - 28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
             </g>
           ))}
 
-          {/* Dynamic Experiment Node Badges */}
+          {/* Node Badges */}
           {nodeMarkers.map((nm) => {
             const hole = HOLE_MAP[nm.hole];
             if (!hole || !detectedNodes) return null;
             const key = nm.netKey ?? (nm.label as 'a' | 'b' | 'c' | 'd' | 'vo');
             const expectedNet = detectedNodes[key];
-            if (expectedNet === undefined || simulation.holeToNet[nm.hole] !== expectedNet) {
-              return null;
-            }
+            if (expectedNet === undefined || simulation.holeToNet[nm.hole] !== expectedNet) return null;
             const ch2Net = probes.ch2Pos ? simulation.holeToNet[probes.ch2Pos] : -2;
             const isProbed = ch2Net === expectedNet;
             const w = Math.max(30, nm.label.length * 7 + 16);
             return (
               <g key={`nm-${nm.label}-${nm.col}`} transform={`translate(${hole.x}, 63)`}>
-                <rect
-                  x={-w / 2}
-                  y={-9}
-                  width={w}
-                  height={14}
-                  rx={7}
-                  fill={isProbed ? '#06b6d4' : '#0f172a'}
-                  stroke={isProbed ? '#a5f3fc' : '#64748b'}
-                  strokeWidth={1}
-                />
-                <text
-                  x={0}
-                  y={1}
-                  textAnchor="middle"
-                  fontSize={8.5}
-                  fontWeight={700}
-                  fontFamily="JetBrains Mono, monospace"
-                  fill={isProbed ? '#082f49' : '#f8fafc'}
-                >
+                <rect x={-w / 2} y={-9} width={w} height={14} rx={7} fill={isProbed ? '#06b6d4' : '#0f172a'} stroke={isProbed ? '#a5f3fc' : '#64748b'} strokeWidth={1} />
+                <text x={0} y={1} textAnchor="middle" fontSize={8.5} fontWeight={700} fontFamily="JetBrains Mono, monospace" fill={isProbed ? '#082f49' : '#f8fafc'}>
                   ({nm.label})
                 </text>
               </g>
             );
           })}
 
-          {/* Breadboard Tie-Point Holes */}
+          {/* Holes */}
           {ALL_HOLES.map((h) => {
             const isStripHL = highlightSets.stripHoles.has(h.id);
             const isWireHL = highlightSets.wireConnectedHoles.has(h.id);
@@ -795,27 +619,12 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                     cx={h.x}
                     cy={h.y}
                     r={isHovered || isPending ? 9.2 : 7.8}
-                    fill={
-                      isPending
-                        ? 'rgba(249,115,22,0.35)'
-                        : isStripHL
-                          ? 'rgba(16,185,129,0.3)'
-                          : 'rgba(56,189,248,0.28)'
-                    }
+                    fill={isPending ? 'rgba(249,115,22,0.35)' : isStripHL ? 'rgba(16,185,129,0.3)' : 'rgba(56,189,248,0.28)'}
                     stroke={isPending ? '#f97316' : isStripHL ? '#10b981' : '#38bdf8'}
                     strokeWidth={1.6}
                   />
                 )}
-                <rect
-                  x={h.x - 4.4}
-                  y={h.y - 4.4}
-                  width={8.8}
-                  height={8.8}
-                  rx={1.8}
-                  fill={isHovered ? '#0f172a' : '#292524'}
-                  stroke="#a8a29e"
-                  strokeWidth={0.9}
-                />
+                <rect x={h.x - 4.4} y={h.y - 4.4} width={8.8} height={8.8} rx={1.8} fill={isHovered ? '#0f172a' : '#292524'} stroke="#a8a29e" strokeWidth={0.9} />
                 <circle cx={h.x} cy={h.y} r={10} fill="transparent" />
               </g>
             );
@@ -825,17 +634,15 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           {components.filter((c) => c.type !== 'wire').map((c) => renderComponentSvg(c))}
           {ghostComp && renderComponentSvg(ghostComp, true)}
 
-          {/* BNC & RPS Probe Clips */}
+          {/* Probe Clips */}
           {(Object.keys(PROBE_META) as ProbeId[]).map((pid) => {
             const holeId = probes[pid];
             if (!holeId) return null;
             const h = HOLE_MAP[holeId];
             if (!h) return null;
             const meta = PROBE_META[pid];
-            const placeBelow =
-              h.section === 'bn' || h.section === 'bp' || h.section === 'tn' || h.rowLabel === 'e';
-            const badgeY =
-              h.section === 'tp' ? h.y - 16 : placeBelow ? h.y + 18 : h.y - 18;
+            const placeBelow = h.section === 'bn' || h.section === 'bp' || h.section === 'tn' || h.rowLabel === 'e';
+            const badgeY = h.section === 'tp' ? h.y - 16 : placeBelow ? h.y + 18 : h.y - 18;
             const active = tool === `probe:${pid}`;
             const tagW = Math.max(32, meta.short.length * 6.2 + 10);
 
@@ -849,43 +656,12 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                   setPendingPin1(null);
                 }}
               >
-                <line
-                  x1={h.x}
-                  y1={h.y}
-                  x2={h.x}
-                  y2={badgeY > h.y ? h.y + 11 : h.y - 11}
-                  stroke={meta.color}
-                  strokeWidth={2.5}
-                />
-                <circle
-                  cx={h.x}
-                  cy={h.y}
-                  r={5.8}
-                  fill={meta.color}
-                  stroke={meta.stroke}
-                  strokeWidth={active ? 2.4 : 1.5}
-                />
+                <line x1={h.x} y1={h.y} x2={h.x} y2={badgeY > h.y ? h.y + 11 : h.y - 11} stroke={meta.color} strokeWidth={2.5} />
+                <circle cx={h.x} cy={h.y} r={5.8} fill={meta.color} stroke={meta.stroke} strokeWidth={active ? 2.4 : 1.5} />
                 <circle cx={h.x} cy={h.y} r={2} fill="#0f172a" />
                 <g transform={`translate(${h.x}, ${badgeY})`}>
-                  <rect
-                    x={-tagW / 2}
-                    y={-8}
-                    width={tagW}
-                    height={15}
-                    rx={4}
-                    fill={meta.color}
-                    stroke={active ? '#fff' : meta.stroke}
-                    strokeWidth={active ? 1.8 : 1}
-                  />
-                  <text
-                    x={0}
-                    y={2.5}
-                    textAnchor="middle"
-                    fontSize={8.2}
-                    fontWeight={800}
-                    fontFamily="JetBrains Mono, monospace"
-                    fill={meta.textColor}
-                  >
+                  <rect x={-tagW / 2} y={-8} width={tagW} height={15} rx={4} fill={meta.color} stroke={active ? '#fff' : meta.stroke} strokeWidth={active ? 1.8 : 1} />
+                  <text x={0} y={2.5} textAnchor="middle" fontSize={8.2} fontWeight={800} fontFamily="JetBrains Mono, monospace" fill={meta.textColor}>
                     {meta.short}
                   </text>
                 </g>
@@ -895,8 +671,8 @@ export const Breadboard: React.FC<BreadboardProps> = ({
         </svg>
       </div>
 
-      {/* Selected Component Inspector Bar */}
-      {selectedComp && (
+      {/* Quiet 1-line Bottom Status / Inspector Bar */}
+      {selectedComp ? (
         <div className="bb-inspector">
           <div className="insp-title">
             <span className="insp-type">{selectedComp.type.toUpperCase()}</span>
@@ -917,7 +693,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             {selectedComp.type === 'resistor' && (
               <>
                 <label className="insp-field">
-                  <span>Value (Ω)</span>
+                  <span>Ω</span>
                   <input
                     type="number"
                     min={10}
@@ -926,36 +702,26 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                     value={selectedComp.value}
                     onChange={(e) => {
                       const v = parseFloat(e.target.value);
-                      if (Number.isFinite(v) && v > 0) {
-                        onUpdateComponent(selectedComp.id, { value: v });
-                      }
+                      if (Number.isFinite(v) && v > 0) onUpdateComponent(selectedComp.id, { value: v });
                     }}
                   />
                 </label>
-                <div className="insp-presets">
-                  {[
-                    { lbl: '1kΩ', val: 1000 },
-                    { lbl: '10kΩ', val: 10000 },
-                    { lbl: '20kΩ', val: 20000 },
-                    { lbl: '22kΩ', val: 22000 },
-                    { lbl: '30kΩ', val: 30000 },
-                  ].map((p) => (
-                    <button
-                      key={p.lbl}
-                      className={`mini-chip ${selectedComp.value === p.val ? 'active' : ''}`}
-                      onClick={() => onUpdateComponent(selectedComp.id, { value: p.val })}
-                    >
-                      {p.lbl}
-                    </button>
-                  ))}
-                </div>
+                {[1000, 10000, 20000, 22000, 30000].map((val) => (
+                  <button
+                    key={val}
+                    className={`mini-chip ${selectedComp.value === val ? 'active' : ''}`}
+                    onClick={() => onUpdateComponent(selectedComp.id, { value: val })}
+                  >
+                    {val / 1000}k
+                  </button>
+                ))}
               </>
             )}
 
             {selectedComp.type === 'capacitor' && (
               <>
                 <label className="insp-field">
-                  <span>Value (µF)</span>
+                  <span>µF</span>
                   <input
                     type="number"
                     min={0.001}
@@ -964,42 +730,29 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                     value={Number((selectedComp.value * 1e6).toPrecision(4))}
                     onChange={(e) => {
                       const uf = parseFloat(e.target.value);
-                      if (Number.isFinite(uf) && uf > 0) {
-                        onUpdateComponent(selectedComp.id, { value: uf * 1e-6 });
-                      }
+                      if (Number.isFinite(uf) && uf > 0) onUpdateComponent(selectedComp.id, { value: uf * 1e-6 });
                     }}
                   />
                 </label>
-                <div className="insp-presets">
-                  {[
-                    { lbl: '0.01µF', val: 0.01e-6 },
-                    { lbl: '0.1µF', val: 0.1e-6 },
-                    { lbl: '1µF', val: 1e-6 },
-                  ].map((p) => (
-                    <button
-                      key={p.lbl}
-                      className={`mini-chip ${Math.abs(selectedComp.value - p.val) < 1e-12 ? 'active' : ''}`}
-                      onClick={() => onUpdateComponent(selectedComp.id, { value: p.val })}
-                    >
-                      {p.lbl}
-                    </button>
-                  ))}
-                </div>
+                {[0.01e-6, 0.1e-6, 1e-6].map((val) => (
+                  <button
+                    key={val}
+                    className={`mini-chip ${Math.abs(selectedComp.value - val) < 1e-12 ? 'active' : ''}`}
+                    onClick={() => onUpdateComponent(selectedComp.id, { value: val })}
+                  >
+                    {formatCapacitance(val)}
+                  </button>
+                ))}
               </>
             )}
 
             {selectedComp.type === 'diode' && (
               <button
                 className="btn-secondary btn-sm"
-                onClick={() =>
-                  onUpdateComponent(selectedComp.id, {
-                    pin1: selectedComp.pin2,
-                    pin2: selectedComp.pin1,
-                  })
-                }
+                onClick={() => onUpdateComponent(selectedComp.id, { pin1: selectedComp.pin2, pin2: selectedComp.pin1 })}
               >
                 <ArrowLeftRight size={13} />
-                <span>Flip Polarity (A ↔ K)</span>
+                <span>Flip Polarity</span>
               </button>
             )}
 
@@ -1011,7 +764,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                     className={`wire-dot ${selectedComp.color === c ? 'active' : ''}`}
                     style={{ background: WIRE_COLOR_HEX[c] }}
                     onClick={() => onUpdateComponent(selectedComp.id, { color: c })}
-                    title={c}
                   />
                 ))}
               </div>
@@ -1025,15 +777,40 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               }}
             >
               <Trash2 size={13} />
-              <span>Delete</span>
             </button>
-            <button
-              className="btn-ghost btn-sm"
-              onClick={() => setSelectedId(null)}
-              title="Close inspector"
-            >
-              <RotateCcw size={13} />
+            <button className="btn-ghost btn-sm" onClick={() => setSelectedId(null)}>
+              <X size={13} />
             </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bb-status-bar">
+          <div className="bb-hint">
+            {tool.startsWith('probe:') ? (
+              <span className="hint-active">
+                <Zap size={12} /> Click any hole to move <strong>{PROBE_META[tool.slice(6) as ProbeId].label}</strong> (Esc cancel)
+              </span>
+            ) : tool !== 'select' ? (
+              <span className="hint-active">
+                <Cpu size={12} />{' '}
+                {pendingPin1
+                  ? `Pin 1 at ${pendingPin1.toUpperCase()} — click Pin 2 to place`
+                  : `Click two holes to place ${tool} (Esc cancel)`}
+              </span>
+            ) : (
+              <span>Hover holes to trace nets · Click any part or probe clip to edit</span>
+            )}
+          </div>
+          <div className="bb-live-hover">
+            {hoveredInfo ? (
+              <>
+                <span className="mono-badge">{hoveredInfo.hole.toUpperCase()}</span>
+                {hoveredInfo.nodeTag && <span className="node-pill">{hoveredInfo.nodeTag}</span>}
+                {hoveredInfo.vRange && <span className="mono-volt">{hoveredInfo.vRange}</span>}
+              </>
+            ) : (
+              <span className="mono-muted">Exact MNA Live</span>
+            )}
           </div>
         </div>
       )}

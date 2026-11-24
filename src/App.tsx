@@ -80,13 +80,14 @@ import {
 } from './experiments/exp5RcFilter';
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Cpu,
   Eraser,
-  Layers,
-  PanelRightClose,
-  PanelRightOpen,
+  HelpCircle,
   RotateCcw,
   ShieldAlert,
+  Table2,
 } from 'lucide-react';
 
 const EXP_TABS: Array<{ id: ExperimentId; label: string; title: string }> = [
@@ -99,7 +100,6 @@ const EXP_TABS: Array<{ id: ExperimentId; label: string; title: string }> = [
 export function App() {
   const [experimentId, setExperimentId] = useState<ExperimentId>('exp2');
 
-  // Shared live workbench state
   const [components, setComponents] = useState<CircuitComponent[]>(() =>
     EXP2_PRESET_COMPONENTS.map((c) => ({ ...c }))
   );
@@ -108,21 +108,19 @@ export function App() {
   const [rps, setRps] = useState<RpsSettings>({ ...EXP3_DEFAULT_RPS });
   const [dso, setDso] = useState<DsoState>({ ...EXP2_DEFAULT_DSO });
 
-  // Sub-variant selectors for Exp 3, 4, 5
   const [exp3Variant, setExp3Variant] = useState<Exp3CircuitVariant>('resistive');
   const [exp4Mode, setExp4Mode] = useState<Exp4CircuitMode>('actual');
   const [exp4Load, setExp4Load] = useState<Exp4LoadKey>('10k');
   const [exp5Mode, setExp5Mode] = useState<Exp5Mode>('step');
 
-  // Lab Companion state
-  const [drawerOpen, setDrawerOpen] = useState<boolean>(true);
-  const [drawerTab, setDrawerTab] = useState<CompanionTab>('procedure');
+  // Slide-over drawer CLOSED by default for a clean, breathable 2-column workbench
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+  const [drawerTab, setDrawerTab] = useState<CompanionTab>('table');
   const [exp2Obs, setExp2Obs] = useState<ObservationStore>(INITIAL_OBSERVATIONS);
   const [exp3Obs, setExp3Obs] = useState<Exp3ObsStore>(INITIAL_EXP3_OBS);
   const [exp4Obs, setExp4Obs] = useState<Exp4ObsRow[]>(INITIAL_EXP4_OBS);
   const [exp5Obs, setExp5Obs] = useState<Exp5FreqRow[]>(INITIAL_EXP5_OBS);
 
-  // Live MNA simulation computed directly from breadboard netlist
   const liveSimulation = useMemo(
     () =>
       simulateBreadboardCircuit(
@@ -137,7 +135,6 @@ export function App() {
   const [frozenSim, setFrozenSim] = useState(liveSimulation);
   const displayedSim = dso.running ? liveSimulation : frozenSim;
 
-  // Experiment-aware live netlist topology verification
   const verification = useMemo(() => {
     switch (experimentId) {
       case 'exp2':
@@ -161,7 +158,6 @@ export function App() {
     return dso.y2;
   }, [dso.cursorMode, dso.trackSource, dso.x2, dso.y2, displayedSim]);
 
-  // Node markers for breadboard overlay
   const nodeMarkers: NodeMarker[] = useMemo(() => {
     if (experimentId === 'exp2') return EXP2_NODE_MARKERS;
     if (experimentId === 'exp3') return EXP3_NODE_MARKERS;
@@ -182,10 +178,10 @@ export function App() {
     const dn = verification.detectedNodes;
     if (dn && net !== undefined && net >= 0) {
       if (experimentId === 'exp2') {
-        if (net === dn.a) return 'va (node a)';
-        if (net === dn.b) return 'vb (node b)';
-        if (net === dn.c) return 'vc (node c)';
-        if (net === dn.d) return 'vd (node d)';
+        if (net === dn.a) return 'va';
+        if (net === dn.b) return 'vb';
+        if (net === dn.c) return 'vc';
+        if (net === dn.d) return 'vd';
       } else if (dn.vo !== undefined && net === dn.vo) {
         return 'vo';
       }
@@ -194,7 +190,15 @@ export function App() {
     return probes.ch2Pos.toUpperCase();
   }, [probes.ch2Pos, displayedSim.holeToNet, verification.detectedNodes, experimentId]);
 
-  // ==================== EXPERIMENT SWITCHING & PRESETS ====================
+  const openCompanionTab = (tab: CompanionTab) => {
+    if (drawerOpen && drawerTab === tab) {
+      setDrawerOpen(false);
+    } else {
+      setDrawerTab(tab);
+      setDrawerOpen(true);
+    }
+  };
+
   const loadExperimentPreset = (target: ExperimentId) => {
     setExperimentId(target);
     if (target === 'exp2') {
@@ -228,11 +232,10 @@ export function App() {
   const handleClearForPractice = () => {
     setComponents([]);
     setProbes(experimentId === 'exp3' ? { ...EXP3_EMPTY_PROBES } : { ...EXP2_EMPTY_PROBES });
-    setDrawerOpen(true);
     setDrawerTab('procedure');
+    setDrawerOpen(true);
   };
 
-  // ==================== EXP 2 HANDLERS ====================
   const activeExp2Ch2Node = useMemo<'b' | 'c' | 'd' | null>(() => {
     if (experimentId !== 'exp2' || !probes.ch2Pos || !verification.detectedNodes) return null;
     const net = displayedSim.holeToNet[probes.ch2Pos];
@@ -260,7 +263,6 @@ export function App() {
     setProbes((prev) => ({ ...prev, ch2Pos: fallback[node] }));
   };
 
-  // ==================== EXP 3 HANDLERS ====================
   const handleExp3Variant = (variant: Exp3CircuitVariant) => {
     setExp3Variant(variant);
     setComponents(buildExp3PresetComponents(variant));
@@ -270,10 +272,7 @@ export function App() {
       enabled: prev.enabled,
       frequency: variant === 'rc_2khz' ? 2000 : 1000,
     }));
-    setDso((prev) => ({
-      ...prev,
-      timePerDiv: variant === 'rc_2khz' ? 0.0001 : 0.0002,
-    }));
+    setDso((prev) => ({ ...prev, timePerDiv: variant === 'rc_2khz' ? 0.0001 : 0.0002 }));
   };
 
   const handleExp3Condition = (cond: Exp3SourceCondition) => {
@@ -310,7 +309,6 @@ export function App() {
     }));
   };
 
-  // ==================== EXP 4 HANDLERS ====================
   const handleExp4Switch = (nextMode: Exp4CircuitMode, nextLoad: Exp4LoadKey) => {
     setExp4Mode(nextMode);
     setExp4Load(nextLoad);
@@ -344,7 +342,6 @@ export function App() {
     setExp4Obs(nextRows);
   };
 
-  // ==================== EXP 5 HANDLERS ====================
   const handleExp5Mode = (nextMode: Exp5Mode) => {
     setExp5Mode(nextMode);
     if (nextMode === 'step') {
@@ -374,16 +371,10 @@ export function App() {
   const handleExp5FreqSelect = (freqHz: number) => {
     setExp5Mode('freq');
     setFg({ ...EXP5_FREQ_FG, frequency: freqHz });
-    // Auto-select sensible Time/Div so ~2 cycles fill the 10-div screen
     const idealDiv = 0.2 / freqHz;
     const choices = [50e-6, 100e-6, 200e-6, 500e-6, 1e-3, 2e-3];
     const best = choices.reduce((a, b) => (Math.abs(b - idealDiv) < Math.abs(a - idealDiv) ? b : a));
-    setDso((prev) => ({
-      ...prev,
-      timePerDiv: best,
-      centerVoltage: 0.0,
-      voltsPerDiv: 1.0,
-    }));
+    setDso((prev) => ({ ...prev, timePerDiv: best, centerVoltage: 0.0, voltsPerDiv: 1.0 }));
   };
 
   const handleAutoSweepExp5 = () => {
@@ -406,7 +397,6 @@ export function App() {
     setExp5Obs(swept);
   };
 
-  // ==================== SHARED BOARD / DSO / OBS HANDLERS ====================
   const handleDsoChange = (patch: Partial<DsoState>) => {
     setDso((prev) => {
       if (patch.running === false && prev.running === true) setFrozenSim(liveSimulation);
@@ -470,39 +460,40 @@ export function App() {
     else setFg(exp5Mode === 'step' ? { ...EXP5_STEP_FG } : { ...EXP5_FREQ_FG });
   };
 
-  // Experiment-specific quick control strip embedded inside Breadboard panel
+  // Compact single-line experiment controls tucked neatly on the right side of the breadboard toolbar
   const experimentControls = useMemo(() => {
     if (experimentId === 'exp2') {
       return (
         <div className="exp-ctrl-row">
-          <span className="probe-group-label">CH2 Quick Probe (Exp 2):</span>
-          {(['b', 'c', 'd'] as const).map((nk) => (
-            <button
-              key={nk}
-              className={`quick-node-btn ${activeExp2Ch2Node === nk ? 'active' : ''}`}
-              onClick={() => handleQuickProbeCh2(nk)}
-            >
-              Node {nk}
-            </button>
-          ))}
+          <span className="ctrl-lbl">CH2:</span>
+          <div className="seg-group compact">
+            {(['b', 'c', 'd'] as const).map((nk) => (
+              <button
+                key={nk}
+                className={`seg-btn ${activeExp2Ch2Node === nk ? 'active' : ''}`}
+                onClick={() => handleQuickProbeCh2(nk)}
+              >
+                Node {nk}
+              </button>
+            ))}
+          </div>
         </div>
       );
     }
 
     if (experimentId === 'exp3') {
       return (
-        <div className="exp-ctrl-row">
-          <span className="probe-group-label">Circuit Variant:</span>
+        <div className="seg-group compact">
           {(
             [
-              { id: 'resistive', label: 'Resistive (R2 = 10 kΩ)' },
-              { id: 'rc_1khz', label: 'RC (0.01 µF, 1 kHz)' },
-              { id: 'rc_2khz', label: 'RC (0.01 µF, 2 kHz)' },
+              { id: 'resistive', label: 'Resistive' },
+              { id: 'rc_1khz', label: 'RC 1 kHz' },
+              { id: 'rc_2khz', label: 'RC 2 kHz' },
             ] as const
           ).map((v) => (
             <button
               key={v.id}
-              className={`quick-node-btn ${exp3Variant === v.id ? 'active' : ''}`}
+              className={`seg-btn ${exp3Variant === v.id ? 'active' : ''}`}
               onClick={() => handleExp3Variant(v.id)}
             >
               {v.label}
@@ -513,68 +504,111 @@ export function App() {
     }
 
     if (experimentId === 'exp4') {
+      const loadIdx = EXP4_LOADS.findIndex((l) => l.key === exp4Load);
       return (
-        <div className="exp-ctrl-stack">
-          <div className="exp-ctrl-row">
-            <span className="probe-group-label">Topology:</span>
+        <div className="exp-ctrl-row">
+          <div className="seg-group compact">
             <button
-              className={`quick-node-btn ${exp4Mode === 'actual' ? 'active' : ''}`}
+              className={`seg-btn ${exp4Mode === 'actual' ? 'active' : ''}`}
               onClick={() => handleExp4Switch('actual', exp4Load)}
             >
-              Actual Ladder (Fig 4.2a)
+              Actual
             </button>
             <button
-              className={`quick-node-btn ${exp4Mode === 'thevenin' ? 'active' : ''}`}
+              className={`seg-btn ${exp4Mode === 'thevenin' ? 'active' : ''}`}
               onClick={() => handleExp4Switch('thevenin', exp4Load)}
             >
-              Thevenin Eq (Fig 4.2b)
+              Thevenin
             </button>
           </div>
-          <div className="exp-ctrl-row">
-            <span className="probe-group-label">Swap Load:</span>
-            {EXP4_LOADS.map((l) => (
-              <button
-                key={l.key}
-                className={`mini-chip ${exp4Load === l.key ? 'active' : ''}`}
-                onClick={() => handleExp4Switch(exp4Mode, l.key)}
-              >
-                {l.short}
-              </button>
-            ))}
+          <div className="step-select">
+            <button
+              className="step-btn"
+              disabled={loadIdx <= 0}
+              onClick={() => loadIdx > 0 && handleExp4Switch(exp4Mode, EXP4_LOADS[loadIdx - 1].key)}
+              title="Previous load"
+            >
+              <ChevronLeft size={13} />
+            </button>
+            <select
+              className="clean-select compact"
+              value={exp4Load}
+              onChange={(e) => handleExp4Switch(exp4Mode, e.target.value as Exp4LoadKey)}
+              aria-label="Select load"
+            >
+              {EXP4_LOADS.map((l) => (
+                <option key={l.key} value={l.key}>
+                  Load: {l.label}
+                </option>
+              ))}
+            </select>
+            <button
+              className="step-btn"
+              disabled={loadIdx >= EXP4_LOADS.length - 1}
+              onClick={() =>
+                loadIdx < EXP4_LOADS.length - 1 &&
+                handleExp4Switch(exp4Mode, EXP4_LOADS[loadIdx + 1].key)
+              }
+              title="Next load"
+            >
+              <ChevronRight size={13} />
+            </button>
           </div>
         </div>
       );
     }
 
+    const freqIdx = EXP5_SWEEP_FREQS.findIndex((f) => Math.abs(f - fg.frequency) < 1);
     return (
-      <div className="exp-ctrl-stack">
-        <div className="exp-ctrl-row">
-          <span className="probe-group-label">Analysis Mode:</span>
+      <div className="exp-ctrl-row">
+        <div className="seg-group compact">
           <button
-            className={`quick-node-btn ${exp5Mode === 'step' ? 'active' : ''}`}
+            className={`seg-btn ${exp5Mode === 'step' ? 'active' : ''}`}
             onClick={() => handleExp5Mode('step')}
           >
-            Time-Domain Step (1 kHz Sq)
+            Step
           </button>
           <button
-            className={`quick-node-btn ${exp5Mode === 'freq' ? 'active' : ''}`}
+            className={`seg-btn ${exp5Mode === 'freq' ? 'active' : ''}`}
             onClick={() => handleExp5Mode('freq')}
           >
-            Freq Response (Sine Sweep)
+            Sine Sweep
           </button>
         </div>
+
         {exp5Mode === 'freq' && (
-          <div className="exp-ctrl-row">
-            <span className="probe-group-label">1-2-5 Sweep:</span>
-            {EXP5_SWEEP_FREQS.map((f) => (
-              <button
-                key={f}
-                className={`mini-chip ${Math.abs(fg.frequency - f) < 1 ? 'active' : ''}`}
-                onClick={() => handleExp5FreqSelect(f)}
-              >
-                {f >= 1000 ? `${f / 1000}k` : f}
-              </button>
-            ))}
+          <div className="step-select">
+            <button
+              className="step-btn"
+              disabled={freqIdx <= 0}
+              onClick={() => freqIdx > 0 && handleExp5FreqSelect(EXP5_SWEEP_FREQS[freqIdx - 1])}
+              title="Lower frequency"
+            >
+              <ChevronLeft size={13} />
+            </button>
+            <select
+              className="clean-select compact"
+              value={freqIdx >= 0 ? EXP5_SWEEP_FREQS[freqIdx] : 1000}
+              onChange={(e) => handleExp5FreqSelect(Number(e.target.value))}
+              aria-label="Select sweep frequency"
+            >
+              {EXP5_SWEEP_FREQS.map((f) => (
+                <option key={f} value={f}>
+                  {f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`}
+                </option>
+              ))}
+            </select>
+            <button
+              className="step-btn"
+              disabled={freqIdx >= EXP5_SWEEP_FREQS.length - 1}
+              onClick={() =>
+                freqIdx < EXP5_SWEEP_FREQS.length - 1 &&
+                handleExp5FreqSelect(EXP5_SWEEP_FREQS[freqIdx + 1])
+              }
+              title="Higher frequency"
+            >
+              <ChevronRight size={13} />
+            </button>
           </div>
         )}
       </div>
@@ -583,24 +617,21 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* Single-Row Top Lab Bench Navigation */}
+      {/* Calm Single-Row Header */}
       <header className="topbar">
         <div className="topbar-left">
           <div className="brand-mark">
-            <Cpu size={17} />
+            <Cpu size={16} />
           </div>
-          <div>
-            <div className="brand-title">EC102 Virtual Lab</div>
-            <div className="brand-sub">IIIT Bhagalpur · Basic Electrical Science</div>
-          </div>
+          <span className="brand-title">EC102 Lab</span>
 
-          <div className="exp-pills" role="tablist" aria-label="EC102 Experiments">
+          <div className="seg-group" role="tablist" aria-label="Experiments">
             {EXP_TABS.map((tab) => (
               <button
                 key={tab.id}
                 role="tab"
                 aria-selected={experimentId === tab.id}
-                className={`exp-pill ${experimentId === tab.id ? 'active' : ''}`}
+                className={`seg-btn ${experimentId === tab.id ? 'active' : ''}`}
                 onClick={() => loadExperimentPreset(tab.id)}
                 title={tab.title}
               >
@@ -612,50 +643,56 @@ export function App() {
 
         <div className="topbar-right">
           <button
-            className="btn-secondary btn-sm"
+            className="btn-ghost btn-sm"
             onClick={() => loadExperimentPreset(experimentId)}
-            title="Reload pre-wired circuit for active experiment"
+            title="Reload clean circuit preset"
           >
             <RotateCcw size={13} />
-            <span>Load Preset</span>
+            <span>Reset</span>
           </button>
 
           <button
             className="btn-ghost btn-sm"
             onClick={handleClearForPractice}
-            title="Clear breadboard to practice wiring from scratch"
+            title="Clear breadboard to wire from scratch"
           >
             <Eraser size={13} />
-            <span>Practice Blank</span>
+            <span>Practice</span>
           </button>
+
+          <div className="topbar-sep" />
 
           <button
             className={`status-pill ${verification.allPassed ? 'ok' : 'warn'}`}
-            onClick={() => {
-              setDrawerOpen(true);
-              setDrawerTab('procedure');
-            }}
+            onClick={() => openCompanionTab('procedure')}
+            title="Open Guide & Wiring Verification"
           >
-            {verification.allPassed ? <CheckCircle2 size={14} /> : <ShieldAlert size={14} />}
+            {verification.allPassed ? <CheckCircle2 size={13} /> : <ShieldAlert size={13} />}
             <span>
-              {verification.allPassed
-                ? `Verified (${verification.score}/${verification.total})`
-                : `Wiring ${verification.score}/${verification.total}`}
+              {verification.score}/{verification.total} Guide
             </span>
           </button>
 
           <button
-            className="btn-primary btn-sm"
-            onClick={() => setDrawerOpen((o) => !o)}
+            className={`btn-secondary btn-sm ${drawerOpen && drawerTab === 'table' ? 'btn-accent-outline' : ''}`}
+            onClick={() => openCompanionTab('table')}
           >
-            {drawerOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-            <span>Companion</span>
+            <Table2 size={13} />
+            <span>{experimentId === 'exp4' || experimentId === 'exp5' ? 'Table & Plot' : 'Obs Table'}</span>
+          </button>
+
+          <button
+            className={`btn-secondary btn-sm ${drawerOpen && drawerTab === 'quiz' ? 'btn-accent-outline' : ''}`}
+            onClick={() => openCompanionTab('quiz')}
+          >
+            <HelpCircle size={13} />
+            <span>Quiz & Viva</span>
           </button>
         </div>
       </header>
 
-      {/* Main Split Workspace */}
-      <main className={`workspace ${drawerOpen ? 'with-drawer' : ''}`}>
+      {/* Spacious 2-Column Main Workbench */}
+      <main className="workspace">
         <div className="bench-grid">
           <section className="bench-left">
             <Breadboard
@@ -672,6 +709,13 @@ export function App() {
               onMoveProbe={handleMoveProbe}
             />
 
+            <FunctionGenerator
+              fg={fg}
+              defaultLabel={`${experimentId.toUpperCase()} Default`}
+              onChange={setFg}
+              onResetDefault={handleResetFgDefault}
+            />
+
             {experimentId === 'exp3' && (
               <DualPowerSupply
                 rps={rps}
@@ -680,21 +724,6 @@ export function App() {
                 onSelectCondition={handleExp3Condition}
               />
             )}
-
-            <FunctionGenerator
-              fg={fg}
-              defaultLabel={`${experimentId.toUpperCase()} Default`}
-              onChange={setFg}
-              onResetDefault={handleResetFgDefault}
-            />
-
-            <div className="bench-footer">
-              <span>
-                <Layers size={12} /> Exact Ideal MNA Engine · Multi-Source DC/AC + 1N4007 Diode +
-                Trapezoidal RC Transient
-              </span>
-              <span>Click part → click 2 holes · Esc cancel · Del remove selected</span>
-            </div>
           </section>
 
           <section className="bench-right">
@@ -711,91 +740,99 @@ export function App() {
             />
           </section>
         </div>
-
-        <LabCompanionDrawer
-          experimentId={experimentId}
-          open={drawerOpen}
-          activeTab={drawerTab}
-          onTabChange={setDrawerTab}
-          onClose={() => setDrawerOpen(false)}
-          verification={verification}
-          simulation={displayedSim}
-          activeFreqHz={fg.frequency}
-          observations={exp2Obs}
-          effectiveY2={effectiveY2}
-          cursorX2Ms={dso.x2 * 1000}
-          cursorMode={dso.cursorMode}
-          onUpdateObs={handleUpdateExp2Obs}
-          onCaptureObs={(m, r, f) => handleUpdateExp2Obs(m, r, f, effectiveY2.toFixed(4))}
-          onAutoFillExactTrack={handleAutoFillExactTrackExp2}
-          onClearObs={(m) =>
-            setExp2Obs((prev) => ({
-              ...prev,
-              [m]: {
-                t1: { va: '', vab: '', vac: '', vc: '', vd: '' },
-                t2: { va: '', vab: '', vac: '', vc: '', vd: '' },
-              },
-            }))
-          }
-          exp3Variant={exp3Variant}
-          exp3Obs={exp3Obs}
-          onUpdateExp3Obs={(v, cond, min, max) =>
-            setExp3Obs((prev) => ({
-              ...prev,
-              [v]: { ...prev[v], [cond]: { min, max } },
-            }))
-          }
-          onAutoFillExp3={handleAutoFillExp3}
-          onClearExp3={(v) =>
-            setExp3Obs((prev) => ({
-              ...prev,
-              [v]: {
-                all: { min: '', max: '' },
-                vd1: { min: '', max: '' },
-                vd2: { min: '', max: '' },
-                va: { min: '', max: '' },
-              },
-            }))
-          }
-          exp4Obs={exp4Obs}
-          onCaptureExp4Row={(rowId) =>
-            setExp4Obs((prev) =>
-              prev.map((r) =>
-                r.rowId === rowId
-                  ? {
-                      ...r,
-                      vsVpp: displayedSim.stats.ch1.vpp.toFixed(3),
-                      voVpp: displayedSim.stats.ch2.vpp.toFixed(4),
-                      voPeak: displayedSim.stats.ch2.vmax.toFixed(4),
-                    }
-                  : r
-              )
-            )
-          }
-          onAutoSweepExp4={handleAutoSweepExp4}
-          onClearExp4={() => setExp4Obs(INITIAL_EXP4_OBS)}
-          exp5Obs={exp5Obs}
-          onCaptureExp5Freq={(freqHz) => {
-            const gain = displayedSim.gain;
-            const dbGain = gain > 1e-6 ? 20 * Math.log10(gain / EXP5_THEORY.am) : -60;
-            setExp5Obs((prev) =>
-              prev.map((r) =>
-                r.freqHz === freqHz
-                  ? {
-                      ...r,
-                      voVpp: displayedSim.stats.ch2.vpp.toFixed(3),
-                      gain,
-                      dbGain,
-                      phaseDeg: displayedSim.phaseDiffDeg,
-                    }
-                  : r
-              )
-            );
-          }}
-          onAutoSweepExp5={handleAutoSweepExp5}
-          onClearExp5={() => setExp5Obs(INITIAL_EXP5_OBS)}
-        />
       </main>
+
+      {/* Clean Slide-Over Lab Companion Overlay */}
+      {drawerOpen && (
+        <div
+          className="drawer-backdrop"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <LabCompanionDrawer
+        experimentId={experimentId}
+        open={drawerOpen}
+        activeTab={drawerTab}
+        onTabChange={setDrawerTab}
+        onClose={() => setDrawerOpen(false)}
+        verification={verification}
+        simulation={displayedSim}
+        activeFreqHz={fg.frequency}
+        observations={exp2Obs}
+        effectiveY2={effectiveY2}
+        cursorX2Ms={dso.x2 * 1000}
+        cursorMode={dso.cursorMode}
+        onUpdateObs={handleUpdateExp2Obs}
+        onCaptureObs={(m, r, f) => handleUpdateExp2Obs(m, r, f, effectiveY2.toFixed(4))}
+        onAutoFillExactTrack={handleAutoFillExactTrackExp2}
+        onClearObs={(m) =>
+          setExp2Obs((prev) => ({
+            ...prev,
+            [m]: {
+              t1: { va: '', vab: '', vac: '', vc: '', vd: '' },
+              t2: { va: '', vab: '', vac: '', vc: '', vd: '' },
+            },
+          }))
+        }
+        exp3Variant={exp3Variant}
+        exp3Obs={exp3Obs}
+        onUpdateExp3Obs={(v, cond, min, max) =>
+          setExp3Obs((prev) => ({
+            ...prev,
+            [v]: { ...prev[v], [cond]: { min, max } },
+          }))
+        }
+        onAutoFillExp3={handleAutoFillExp3}
+        onClearExp3={(v) =>
+          setExp3Obs((prev) => ({
+            ...prev,
+            [v]: {
+              all: { min: '', max: '' },
+              vd1: { min: '', max: '' },
+              vd2: { min: '', max: '' },
+              va: { min: '', max: '' },
+            },
+          }))
+        }
+        exp4Obs={exp4Obs}
+        onCaptureExp4Row={(rowId) =>
+          setExp4Obs((prev) =>
+            prev.map((r) =>
+              r.rowId === rowId
+                ? {
+                    ...r,
+                    vsVpp: displayedSim.stats.ch1.vpp.toFixed(3),
+                    voVpp: displayedSim.stats.ch2.vpp.toFixed(4),
+                    voPeak: displayedSim.stats.ch2.vmax.toFixed(4),
+                  }
+                : r
+            )
+          )
+        }
+        onAutoSweepExp4={handleAutoSweepExp4}
+        onClearExp4={() => setExp4Obs(INITIAL_EXP4_OBS)}
+        exp5Obs={exp5Obs}
+        onCaptureExp5Freq={(freqHz) => {
+          const gain = displayedSim.gain;
+          const dbGain = gain > 1e-6 ? 20 * Math.log10(gain / EXP5_THEORY.am) : -60;
+          setExp5Obs((prev) =>
+            prev.map((r) =>
+              r.freqHz === freqHz
+                ? {
+                    ...r,
+                    voVpp: displayedSim.stats.ch2.vpp.toFixed(3),
+                    gain,
+                    dbGain,
+                    phaseDeg: displayedSim.phaseDiffDeg,
+                  }
+                : r
+            )
+          );
+        }}
+        onAutoSweepExp5={handleAutoSweepExp5}
+        onClearExp5={() => setExp5Obs(INITIAL_EXP5_OBS)}
+      />
     </div>
   );
 }
