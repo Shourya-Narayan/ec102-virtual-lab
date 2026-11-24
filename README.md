@@ -1,34 +1,26 @@
 # EC102 Virtual Lab Workbench — IIIT Bhagalpur
 
-Interactive Tinkercad-style breadboard simulator + hybrid 2-channel ScientiFic-style Digital Storage Oscilloscope (DSO) powered by an exact nonlinear **Modified Nodal Analysis (MNA)** transient circuit solver, built specifically for the **IIIT Bhagalpur Basic Electrical Science Lab (EC102)**.
+Interactive Tinkercad-style breadboard simulator + hybrid 2-channel ScientiFic-style Digital Storage Oscilloscope (DSO) powered by an exact nonlinear **Modified Nodal Analysis (MNA)** transient circuit solver, built specifically for **all four core experiments** of the **IIIT Bhagalpur Basic Electrical Science Lab (EC102)**.
 
 **Live App:** [https://shourya-narayan.github.io/ec102-virtual-lab/](https://shourya-narayan.github.io/ec102-virtual-lab/)
 
-## v1 Features — Experiment 2: Verification of Kirchhoff's Laws
+## Included Experiments (v2 — Complete Suite)
 
-- **Tinkercad-Style 30-Column Interactive Breadboard**
-  - Place, edit, flip polarity, re-route, and delete 1% resistors (live 4-band color codes), 1N4007 diodes (with cathode band), `0.1 µF` polyester film capacitors (`104`), and color-coded jumper wires.
-  - Hover any tie-point hole to highlight internal vertical terminal strips, power rails, and jumper-connected nets with live voltage range inspection.
-  - Movable BNC instrument probe clips (`FG+`, `FG GND`, `CH1+`, `CH2+`) plus 1-click quick-probe pills for `Node b`, `Node c`, and `Node d`.
-  - **Load Exp 2 Preset** (Fig. 2.1) or **Build From Scratch** practice mode with live topology-independent **Verify My Breadboard (8/8)** netlist checking.
-- **Exact Ideal MNA Physics Engine**
-  - Live Union-Find breadboard netlist resolution + short-circuit & ground-clip diagnostics.
-  - Nonlinear Shockley 1N4007 diode model (SPICE `pnjlim` damped Newton-Raphson) + Trapezoidal RC transient integration with steady-state cycle warmup.
-  - Verifies KCL (`vab − vc − vd = 0.0000 V`) and KVL (`va − vac − vc = 0.0000 V`) at `t₁ = −0.4 ms` and `t₂ = +0.3 ms`.
-- **Hybrid 2-Channel Lab DSO & Function Generator**
-  - Phosphor 10×8 oscilloscope canvas with `CH1 (va)`, `CH2`, and `Math (CH1 − CH2)` traces.
-  - Both **Manual Cursor Mode** (drag `X1/X2/Y1/Y2` directly on screen or fine-tune via steppers) and **Track Waveform Mode** (locks `Y1/Y2` mathematically onto `CH1`, `CH2`, or `Math`).
-  - Quick-align helpers (`Axes X1=0, Y1=2.5V`, `X2 = t₁`, `X2 = t₂`).
-- **Lab Companion Drawer**
-  - Interactive IIIT Bhagalpur step-by-step procedure checklist & Fig. 2.1 schematic reference.
-  - Interactive Observation Table (Manual & Track modes) with 1-click `Y2` cursor capture, live KCL/KVL residual verification, Manual vs Track error summary, and CSV export.
-  - All 5 official Experiment 2 Lab Quiz MCQs (including Fig. 3 KCL node diagram) + 8 high-yield EC102 Viva Q&A flashcards.
-
-## Roadmap (v2)
-
-- **Experiment 3:** Verification of the Superposition Theorem (Dual ±DC Power Supply, Resistive & RC circuits at 1 kHz / 2 kHz)
-- **Experiment 4:** Thevenin's & Norton's Theorems (7 resistive loads + `Vo` vs `Io` extrapolation graph, capacitive & diode loads)
-- **Experiment 5:** Low-Pass RC Filter (Step response `tr`/`tf`, X-Y Lissajous mode, Semilog Bode plot `G(dB)` vs `f`)
+1. **Experiment 2: Verification of Kirchhoff's Laws (KCL & KVL)**
+   - Full Fig. 2.1 circuit (`R1 = R2 = R3 = 1 kΩ`, `1N4007` diode, `0.1 µF` capacitor, `1 kHz` triangular FG `0 V → 5 V`).
+   - Quick `CH2` probing (`Node b`, `Node c`, `Node d`), `Math (CH1 − CH2)`, Manual & Track `X1/X2/Y1/Y2` cursors at `t₁ = −0.4 ms` & `t₂ = +0.3 ms`, live KCL/KVL sums (`0.0000 V`), official 5 MCQs (with Fig. 3), and Viva Q&A.
+2. **Experiment 3: Verification of the Superposition Theorem**
+   - Full Fig. 3.1 network (`3 × 30 kΩ`, `10 kΩ` or `0.01 µF` capacitor) with **Dual-Rail DC Power Supply (`+4.8 V / COM / −3.0 V`)** + `3.6 Vpp` Sine FG.
+   - 1-click circuit variants (`Resistive`, `RC 1 kHz`, `RC 2 kHz`) and Superposition source conditions (`All`, `Only VD1`, `Only VD2`, `Only AC va`).
+   - Tables 1–4 with automatic algebraic sums, `% Error` verification, official 5 MCQs, and Viva Q&A.
+3. **Experiment 4: Thevenin's & Norton's Theorems**
+   - Switch live between **Actual Resistive Ladder (Fig. 4.2a)** and **Thevenin Equivalent (Fig. 4.2b: `vOC = vs/4`, `Ro = 10 kΩ`)**.
+   - Swap all 9 loads live on the breadboard: 7 resistive loads (`1 kΩ` – `100 kΩ`), `0.01 µF` capacitive load, and nonlinear `1N4007` diode load.
+   - Live **`Vo` vs `Io` Linear Extrapolation Plot** computing `vOC`, `iSC`, and `Ro = 10.00 kΩ`, official 5 MCQs, and Viva Q&A.
+4. **Experiment 5: Time-Domain & Frequency-Domain Response (Low-Pass RC Filter)**
+   - Fig. 5.1 Low-Pass RC Filter (`R1 = R2 = 22 kΩ`, `C = 0.01 µF` → `Req = 11 kΩ`, `τ = 110 µs`, `tr = tf ≈ 242 µs`, `Am = 0.50`, `fc = 1.45 kHz`).
+   - Time-Domain Step Response (`1 kHz` square wave, `Y1 = 0.20 V`, `Y2 = 1.80 V`) + Frequency-Domain 1-2-5 Sweep (`100 Hz` – `10 kHz`).
+   - Live **DSO `X-Y` Lissajous Mode** (ellipse at `1 kHz` collapsing to slope `0.50` line at low frequencies) + **Semilog Bode Plot (`G(dB)` vs `f`)** marking `−3 dB` cut-off `fc`, Quiz, and Viva Q&A.
 
 ## Local Development
 

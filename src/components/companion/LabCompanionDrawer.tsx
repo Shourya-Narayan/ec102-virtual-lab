@@ -1,13 +1,41 @@
 import React, { useState } from 'react';
-import type { VerificationResult } from '../../engine/types';
+import type { ExperimentId, SimulationResult, VerificationResult } from '../../engine/types';
 import {
   EXP2_PROCEDURE_STEPS,
   EXP2_QUIZ_QUESTIONS,
   EXP2_VIVA_CARDS,
+  type ProcedureStep,
+  type QuizQuestion,
+  type VivaCard,
 } from '../../experiments/exp2Kirchhoff';
 import {
+  EXP3_PROCEDURE_STEPS,
+  EXP3_QUIZ_QUESTIONS,
+  EXP3_VIVA_CARDS,
+  type Exp3CircuitVariant,
+  type Exp3SourceCondition,
+} from '../../experiments/exp3Superposition';
+import {
+  EXP4_PROCEDURE_STEPS,
+  EXP4_QUIZ_QUESTIONS,
+  EXP4_VIVA_CARDS,
+} from '../../experiments/exp4Thevenin';
+import {
+  EXP5_PROCEDURE_STEPS,
+  EXP5_QUIZ_QUESTIONS,
+  EXP5_VIVA_CARDS,
+} from '../../experiments/exp5RcFilter';
+import {
+  Exp3ObsPanel,
+  Exp4ObsPanel,
+  Exp5ObsPanel,
+  type Exp3ObsStore,
+  type Exp4ObsRow,
+  type Exp5FreqRow,
+} from './ExperimentObsPanels';
+import { ExperimentSchematic } from './ExperimentSchematics';
+import {
   Award,
-  BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -55,11 +83,15 @@ export const INITIAL_OBSERVATIONS: ObservationStore = {
 export type CompanionTab = 'procedure' | 'table' | 'quiz';
 
 interface LabCompanionDrawerProps {
+  experimentId: ExperimentId;
   open: boolean;
   activeTab: CompanionTab;
   onTabChange: (tab: CompanionTab) => void;
   onClose: () => void;
   verification: VerificationResult;
+  simulation: SimulationResult;
+  activeFreqHz: number;
+  // Exp 2
   observations: ObservationStore;
   effectiveY2: number;
   cursorX2Ms: number;
@@ -68,6 +100,22 @@ interface LabCompanionDrawerProps {
   onCaptureObs: (mode: ObsModeKey, row: ObsRowKey, field: ObsField) => void;
   onAutoFillExactTrack: () => void;
   onClearObs: (mode: ObsModeKey) => void;
+  // Exp 3
+  exp3Variant: Exp3CircuitVariant;
+  exp3Obs: Exp3ObsStore;
+  onUpdateExp3Obs: (variant: Exp3CircuitVariant, cond: Exp3SourceCondition, min: string, max: string) => void;
+  onAutoFillExp3: (variant: Exp3CircuitVariant) => void;
+  onClearExp3: (variant: Exp3CircuitVariant) => void;
+  // Exp 4
+  exp4Obs: Exp4ObsRow[];
+  onCaptureExp4Row: (rowId: string) => void;
+  onAutoSweepExp4: () => void;
+  onClearExp4: () => void;
+  // Exp 5
+  exp5Obs: Exp5FreqRow[];
+  onCaptureExp5Freq: (freqHz: number) => void;
+  onAutoSweepExp5: () => void;
+  onClearExp5: () => void;
 }
 
 function parseNum(s: string): number | null {
@@ -96,12 +144,50 @@ const OBS_FIELDS: Array<{ key: ObsField; label: string; tip: string }> = [
   { key: 'vd', label: 'vd', tip: 'CH2 on node d' },
 ];
 
+const EXP_CONTENT: Record<
+  ExperimentId,
+  {
+    shortName: string;
+    steps: ProcedureStep[];
+    quiz: QuizQuestion[];
+    viva: VivaCard[];
+  }
+> = {
+  exp2: {
+    shortName: 'Experiment 2',
+    steps: EXP2_PROCEDURE_STEPS,
+    quiz: EXP2_QUIZ_QUESTIONS,
+    viva: EXP2_VIVA_CARDS,
+  },
+  exp3: {
+    shortName: 'Experiment 3',
+    steps: EXP3_PROCEDURE_STEPS,
+    quiz: EXP3_QUIZ_QUESTIONS,
+    viva: EXP3_VIVA_CARDS,
+  },
+  exp4: {
+    shortName: 'Experiment 4',
+    steps: EXP4_PROCEDURE_STEPS,
+    quiz: EXP4_QUIZ_QUESTIONS,
+    viva: EXP4_VIVA_CARDS,
+  },
+  exp5: {
+    shortName: 'Experiment 5',
+    steps: EXP5_PROCEDURE_STEPS,
+    quiz: EXP5_QUIZ_QUESTIONS,
+    viva: EXP5_VIVA_CARDS,
+  },
+};
+
 export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
+  experimentId,
   open,
   activeTab,
   onTabChange,
   onClose,
   verification,
+  simulation,
+  activeFreqHz,
   observations,
   effectiveY2,
   cursorX2Ms,
@@ -110,18 +196,33 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
   onCaptureObs,
   onAutoFillExactTrack,
   onClearObs,
+  exp3Variant,
+  exp3Obs,
+  onUpdateExp3Obs,
+  onAutoFillExp3,
+  onClearExp3,
+  exp4Obs,
+  onCaptureExp4Row,
+  onAutoSweepExp4,
+  onClearExp4,
+  exp5Obs,
+  onCaptureExp5Freq,
+  onAutoSweepExp5,
+  onClearExp5,
 }) => {
   const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
   const [obsMode, setObsMode] = useState<ObsModeKey>('track');
-  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
-  const [openViva, setOpenViva] = useState<Record<number, boolean>>({ 1: true });
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
+  const [openViva, setOpenViva] = useState<Record<string, boolean>>({ 'exp2-1': true, 'exp3-1': true, 'exp4-1': true, 'exp5-1': true });
 
   if (!open) return null;
+
+  const content = EXP_CONTENT[experimentId];
 
   const toggleStep = (id: string) =>
     setCheckedSteps((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  const exportCsv = () => {
+  const exportExp2Csv = () => {
     const lines = [
       'Mode,Time,va (V),vab (V),vac (V),vc (V),vd (V),KCL (vab-vc-vd),KVL (va-vac-vc)',
     ];
@@ -154,11 +255,13 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const quizScore = EXP2_QUIZ_QUESTIONS.reduce(
-    (acc, q) => acc + (quizAnswers[q.id] === q.correctIndex ? 1 : 0),
+  const quizScore = content.quiz.reduce(
+    (acc, q) => acc + (quizAnswers[`${experimentId}-${q.id}`] === q.correctIndex ? 1 : 0),
     0
   );
-  const quizAnsweredCount = Object.keys(quizAnswers).length;
+  const quizAnsweredCount = content.quiz.filter(
+    (q) => quizAnswers[`${experimentId}-${q.id}`] !== undefined
+  ).length;
 
   const activeRows = observations[obsMode];
   const mT1 = computeChecks(observations.manual.t1);
@@ -167,7 +270,7 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
   const trT2 = computeChecks(observations.track.t2);
 
   return (
-    <aside className="companion-drawer" aria-label="Experiment 2 Lab Companion">
+    <aside className="companion-drawer" aria-label="Lab Companion">
       <div className="drawer-header">
         <div className="drawer-tabs">
           <button
@@ -182,7 +285,7 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
             onClick={() => onTabChange('table')}
           >
             <Table2 size={14} />
-            <span>Obs Table</span>
+            <span>{experimentId === 'exp4' || experimentId === 'exp5' ? 'Table & Plot' : 'Obs Table'}</span>
           </button>
           <button
             className={`drawer-tab ${activeTab === 'quiz' ? 'active' : ''}`}
@@ -198,17 +301,14 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
       </div>
 
       <div className="drawer-body">
-        {/* TAB 1: PROCEDURE & BREADBOARD CHECKER */}
+        {/* TAB 1: PROCEDURE & LIVE CIRCUIT CHECKER */}
         {activeTab === 'procedure' && (
           <div className="drawer-section-stack">
-            {/* Live Breadboard Topology Verifier */}
             <div className={`verify-card ${verification.allPassed ? 'passed' : 'pending'}`}>
               <div className="verify-header">
                 <div>
                   <div className="verify-title">Verify My Breadboard</div>
-                  <div className="verify-sub">
-                    Live electrical netlist check against Fig. 2.1
-                  </div>
+                  <div className="verify-sub">Live electrical netlist check ({content.shortName})</div>
                 </div>
                 <span className={`score-badge ${verification.allPassed ? 'ok' : 'warn'}`}>
                   {verification.score}/{verification.total}
@@ -231,114 +331,17 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
               </div>
             </div>
 
-            {/* Crisp Fig 2.1 Schematic Reference */}
-            <div className="ref-card">
-              <div className="ref-title">
-                <BookOpen size={13} /> Fig. 2.1 Reference Schematic (R₁ = R₂ = R₃ = 1 kΩ)
-              </div>
-              <svg viewBox="0 0 360 125" className="ref-svg">
-                {/* Ground rail */}
-                <line x1="36" y1="104" x2="318" y2="104" stroke="#64748b" strokeWidth="1.6" />
-                {/* Ground symbol */}
-                <line x1="176" y1="104" x2="176" y2="112" stroke="#64748b" strokeWidth="1.6" />
-                <line x1="165" y1="112" x2="187" y2="112" stroke="#64748b" strokeWidth="1.6" />
-                <line x1="170" y1="117" x2="182" y2="117" stroke="#64748b" strokeWidth="1.4" />
-                <line x1="174" y1="121" x2="178" y2="121" stroke="#64748b" strokeWidth="1.2" />
+            <ExperimentSchematic experimentId={experimentId} />
 
-                {/* Source va */}
-                <line x1="36" y1="30" x2="36" y2="50" stroke="#e2e8f0" strokeWidth="1.6" />
-                <circle cx="36" cy="67" r="17" fill="#0f172a" stroke="#facc15" strokeWidth="1.8" />
-                <text x="36" y="63" textAnchor="middle" fontSize="11" fill="#facc15" fontWeight="700">+</text>
-                <text x="36" y="77" textAnchor="middle" fontSize="12" fill="#94a3b8" fontWeight="700">−</text>
-                <text x="14" y="71" textAnchor="middle" fontSize="10" fill="#facc15" fontFamily="JetBrains Mono">va</text>
-                <line x1="36" y1="84" x2="36" y2="104" stroke="#e2e8f0" strokeWidth="1.6" />
-
-                {/* Top wire a -> R1 -> b -> D -> c -> C -> d */}
-                <line x1="36" y1="30" x2="64" y2="30" stroke="#e2e8f0" strokeWidth="1.6" />
-                {/* R1 zigzag */}
-                <polyline
-                  points="64,30 69,22 77,38 85,22 93,38 101,22 106,30"
-                  fill="none"
-                  stroke="#60a5fa"
-                  strokeWidth="1.8"
-                />
-                <text x="85" y="16" textAnchor="middle" fontSize="9.5" fill="#93c5fd" fontFamily="JetBrains Mono">R1 1kΩ</text>
-                <line x1="106" y1="30" x2="146" y2="30" stroke="#e2e8f0" strokeWidth="1.6" />
-
-                {/* Diode D (b -> c) */}
-                <polygon points="146,21 146,39 164,30" fill="#e2e8f0" />
-                <line x1="164" y1="21" x2="164" y2="39" stroke="#e2e8f0" strokeWidth="2.2" />
-                <text x="155" y="15" textAnchor="middle" fontSize="9.5" fill="#e2e8f0" fontFamily="JetBrains Mono">D 1N4007</text>
-
-                {/* Node c junction */}
-                <line x1="164" y1="30" x2="246" y2="30" stroke="#e2e8f0" strokeWidth="1.6" />
-                {/* Capacitor C */}
-                <line x1="246" y1="19" x2="246" y2="41" stroke="#f59e0b" strokeWidth="2.4" />
-                <line x1="255" y1="19" x2="255" y2="41" stroke="#f59e0b" strokeWidth="2.4" />
-                <text x="250" y="14" textAnchor="middle" fontSize="9.5" fill="#fcd34d" fontFamily="JetBrains Mono">C 0.1µF</text>
-                <line x1="255" y1="30" x2="318" y2="30" stroke="#e2e8f0" strokeWidth="1.6" />
-
-                {/* Branch R2 at node c (x=204) */}
-                <line x1="204" y1="30" x2="204" y2="48" stroke="#e2e8f0" strokeWidth="1.6" />
-                <polyline
-                  points="204,48 196,53 212,61 196,69 212,77 196,85 204,90"
-                  fill="none"
-                  stroke="#60a5fa"
-                  strokeWidth="1.8"
-                />
-                <line x1="204" y1="90" x2="204" y2="104" stroke="#e2e8f0" strokeWidth="1.6" />
-                <text x="180" y="72" textAnchor="middle" fontSize="9.5" fill="#93c5fd" fontFamily="JetBrains Mono">R2</text>
-
-                {/* Branch R3 at node d (x=318) */}
-                <line x1="318" y1="30" x2="318" y2="48" stroke="#e2e8f0" strokeWidth="1.6" />
-                <polyline
-                  points="318,48 310,53 326,61 310,69 326,77 310,85 318,90"
-                  fill="none"
-                  stroke="#60a5fa"
-                  strokeWidth="1.8"
-                />
-                <line x1="318" y1="90" x2="318" y2="104" stroke="#e2e8f0" strokeWidth="1.6" />
-                <text x="342" y="72" textAnchor="middle" fontSize="9.5" fill="#93c5fd" fontFamily="JetBrains Mono">R3</text>
-
-                {/* Node dots & labels a, b, c, d */}
-                {[
-                  { x: 46, lbl: 'a', color: '#facc15' },
-                  { x: 124, lbl: 'b', color: '#22d3ee' },
-                  { x: 204, lbl: 'c', color: '#34d399' },
-                  { x: 318, lbl: 'd', color: '#fb923c' },
-                ].map((n) => (
-                  <g key={n.lbl}>
-                    <circle cx={n.x} cy="30" r="3.5" fill={n.color} />
-                    <text
-                      x={n.x}
-                      y="46"
-                      textAnchor="middle"
-                      fontSize="10.5"
-                      fontWeight="700"
-                      fill={n.color}
-                      fontFamily="JetBrains Mono"
-                    >
-                      {n.lbl}
-                    </text>
-                  </g>
-                ))}
-              </svg>
-              <div className="ref-formula-row">
-                <span>KCL (Node c): <code>vab − vc − vd = 0</code></span>
-                <span>KVL (Loop): <code>va − vac − vc = 0</code></span>
-              </div>
-            </div>
-
-            {/* Step-by-step Procedure Checklist */}
             <div className="proc-card">
               <div className="proc-header">
                 <span>IIIT Bhagalpur Procedure</span>
                 <span className="mono-muted">
-                  {Object.values(checkedSteps).filter(Boolean).length}/{EXP2_PROCEDURE_STEPS.length} done
+                  {content.steps.filter((s) => checkedSteps[s.id]).length}/{content.steps.length} done
                 </span>
               </div>
               <div className="proc-list">
-                {EXP2_PROCEDURE_STEPS.map((step, idx) => {
+                {content.steps.map((step, idx) => {
                   const done = !!checkedSteps[step.id];
                   return (
                     <label key={step.id} className={`proc-item ${done ? 'done' : ''}`}>
@@ -362,8 +365,8 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
           </div>
         )}
 
-        {/* TAB 2: OBSERVATION TABLE */}
-        {activeTab === 'table' && (
+        {/* TAB 2: OBSERVATION TABLES & LIVE PLOTS */}
+        {activeTab === 'table' && experimentId === 'exp2' && (
           <div className="drawer-section-stack">
             <div className="obs-toolbar">
               <div className="seg-group compact">
@@ -387,24 +390,15 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
                     setObsMode('track');
                     onAutoFillExactTrack();
                   }}
-                  title="Compute exact ideal Track readings from the live circuit solver"
                 >
                   <Sparkles size={12} />
                   <span>Exact Track</span>
                 </button>
-                <button
-                  className="btn-ghost btn-sm"
-                  onClick={exportCsv}
-                  title="Download CSV for lab record"
-                >
+                <button className="btn-ghost btn-sm" onClick={exportExp2Csv} title="Download CSV">
                   <Download size={12} />
                   <span>CSV</span>
                 </button>
-                <button
-                  className="btn-ghost btn-sm"
-                  onClick={() => onClearObs(obsMode)}
-                  title="Clear current mode rows"
-                >
+                <button className="btn-ghost btn-sm" onClick={() => onClearObs(obsMode)} title="Clear">
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -413,13 +407,11 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
             <div className="obs-live-banner">
               <Crosshair size={13} />
               <span>
-                DSO Live ({cursorMode.toUpperCase()}): <strong>X2 = {cursorX2Ms.toFixed(3)} ms</strong> ·{' '}
-                <strong className="c-x2">Y2 = {effectiveY2.toFixed(3)} V</strong> — click{' '}
-                <code>Y2</code> on any cell to log
+                DSO ({cursorMode.toUpperCase()}): <strong>X2 = {cursorX2Ms.toFixed(3)} ms</strong> ·{' '}
+                <strong className="c-x2">Y2 = {effectiveY2.toFixed(3)} V</strong>
               </span>
             </div>
 
-            {/* Observation Cards for t1 and t2 */}
             {(['t1', 't2'] as ObsRowKey[]).map((rowKey) => {
               const row = activeRows[rowKey];
               const { kcl, kvl } = computeChecks(row);
@@ -442,7 +434,7 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
                           <button
                             className="capture-btn"
                             onClick={() => onCaptureObs(obsMode, rowKey, f.key)}
-                            title={`Capture current DSO Y2 (${effectiveY2.toFixed(3)} V) into ${f.label} (${f.tip})`}
+                            title={`Capture Y2 (${effectiveY2.toFixed(3)} V) into ${f.label}`}
                           >
                             Y2
                           </button>
@@ -459,25 +451,16 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
                     ))}
                   </div>
 
-                  {/* Auto-Calculated KCL & KVL Verification Row */}
                   <div className="obs-verify-strip">
                     <div className="obs-sum">
                       <span className="sum-lbl">KCL (vab − vc − vd):</span>
-                      <span
-                        className={`sum-val ${
-                          kcl === null ? '' : Math.abs(kcl) < 0.02 ? 'ok' : 'warn'
-                        }`}
-                      >
+                      <span className={`sum-val ${kcl === null ? '' : Math.abs(kcl) < 0.02 ? 'ok' : 'warn'}`}>
                         {kcl !== null ? `${kcl >= 0 ? '+' : ''}${kcl.toFixed(4)} V` : '—'}
                       </span>
                     </div>
                     <div className="obs-sum">
                       <span className="sum-lbl">KVL (va − vac − vc):</span>
-                      <span
-                        className={`sum-val ${
-                          kvl === null ? '' : Math.abs(kvl) < 0.02 ? 'ok' : 'warn'
-                        }`}
-                      >
+                      <span className={`sum-val ${kvl === null ? '' : Math.abs(kvl) < 0.02 ? 'ok' : 'warn'}`}>
                         {kvl !== null ? `${kvl >= 0 ? '+' : ''}${kvl.toFixed(4)} V` : '—'}
                       </span>
                     </div>
@@ -486,17 +469,16 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
               );
             })}
 
-            {/* Manual vs Track Comparison Summary (Steps 14 & 15) */}
             <div className="ref-card">
               <div className="ref-title">Steps 14–15: Manual vs Track Error Summary</div>
               <table className="mini-compare-table">
                 <thead>
                   <tr>
                     <th>Instant</th>
-                    <th>Manual |KCL|</th>
-                    <th>Track |KCL|</th>
-                    <th>Manual |KVL|</th>
-                    <th>Track |KVL|</th>
+                    <th>Man |KCL|</th>
+                    <th>Trk |KCL|</th>
+                    <th>Man |KVL|</th>
+                    <th>Trk |KVL|</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -516,38 +498,66 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
                   </tr>
                 </tbody>
               </table>
-              <p className="compare-note">
-                Track Waveform Mode eliminates Manual Y2 eye-estimation error, driving KCL & KVL
-                residuals cleanly toward 0.0000 V.
-              </p>
             </div>
           </div>
         )}
 
-        {/* TAB 3: LAB QUIZ & VIVA Q&A */}
+        {activeTab === 'table' && experimentId === 'exp3' && (
+          <Exp3ObsPanel
+            activeVariant={exp3Variant}
+            store={exp3Obs}
+            simulation={simulation}
+            onUpdate={onUpdateExp3Obs}
+            onAutoFill={onAutoFillExp3}
+            onClear={onClearExp3}
+          />
+        )}
+
+        {activeTab === 'table' && experimentId === 'exp4' && (
+          <Exp4ObsPanel
+            rows={exp4Obs}
+            simulation={simulation}
+            onCaptureRow={onCaptureExp4Row}
+            onAutoSweep={onAutoSweepExp4}
+            onClear={onClearExp4}
+          />
+        )}
+
+        {activeTab === 'table' && experimentId === 'exp5' && (
+          <Exp5ObsPanel
+            rows={exp5Obs}
+            activeFreqHz={activeFreqHz}
+            simulation={simulation}
+            onCaptureFreq={onCaptureExp5Freq}
+            onAutoSweepAll={onAutoSweepExp5}
+            onClear={onClearExp5}
+          />
+        )}
+
+        {/* TAB 3: QUIZ & VIVA */}
         {activeTab === 'quiz' && (
           <div className="drawer-section-stack">
             <div className="quiz-score-bar">
               <div className="quiz-score-left">
                 <Award size={15} className="c-ch1" />
-                <span>Experiment 2 Official Lab Quiz (5 MCQs)</span>
+                <span>{content.shortName} Lab Quiz ({content.quiz.length} MCQs)</span>
               </div>
               <span className="score-badge ok">
-                {quizScore}/{EXP2_QUIZ_QUESTIONS.length}
-                {quizAnsweredCount < EXP2_QUIZ_QUESTIONS.length ? ` (${quizAnsweredCount} ans)` : ''}
+                {quizScore}/{content.quiz.length}
+                {quizAnsweredCount < content.quiz.length ? ` (${quizAnsweredCount} ans)` : ''}
               </span>
             </div>
 
-            {EXP2_QUIZ_QUESTIONS.map((q) => {
-              const picked = quizAnswers[q.id];
+            {content.quiz.map((q) => {
+              const qKey = `${experimentId}-${q.id}`;
+              const picked = quizAnswers[qKey];
               const isAnswered = picked !== undefined;
               return (
-                <div key={q.id} className="quiz-card">
+                <div key={qKey} className="quiz-card">
                   <div className="quiz-q">
                     Q{q.id}. {q.question}
                   </div>
 
-                  {/* Official Fig. 3 KCL Node Diagram for Question 4 */}
                   {q.hasFigure3 && (
                     <svg viewBox="0 0 280 120" className="fig3-svg">
                       <defs>
@@ -555,20 +565,14 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
                           <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
                         </marker>
                       </defs>
-                      {/* Node center at (130, 56) */}
-                      {/* I entering from top-left */}
                       <line x1="56" y1="24" x2="124" y2="53" stroke="#38bdf8" strokeWidth="1.8" markerEnd="url(#arr)" />
                       <text x="82" y="28" fontSize="11" fontWeight="700" fill="#facc15" fontFamily="JetBrains Mono">I</text>
-                      {/* 3A entering from bottom-left */}
                       <line x1="90" y1="96" x2="126" y2="61" stroke="#38bdf8" strokeWidth="1.8" markerEnd="url(#arr)" />
                       <text x="92" y="79" fontSize="10.5" fill="#e2e8f0" fontFamily="JetBrains Mono">3A</text>
-                      {/* 2A leaving to left-down */}
                       <line x1="130" y1="56" x2="46" y2="86" stroke="#38bdf8" strokeWidth="1.8" markerEnd="url(#arr)" />
                       <text x="68" y="68" fontSize="10.5" fill="#e2e8f0" fontFamily="JetBrains Mono">2A</text>
-                      {/* 5A leaving to top-right */}
                       <line x1="130" y1="56" x2="232" y2="16" stroke="#38bdf8" strokeWidth="1.8" markerEnd="url(#arr)" />
                       <text x="174" y="34" fontSize="10.5" fill="#e2e8f0" fontFamily="JetBrains Mono">5A</text>
-                      {/* 4A leaving to bottom-right */}
                       <line x1="130" y1="56" x2="182" y2="108" stroke="#38bdf8" strokeWidth="1.8" markerEnd="url(#arr)" />
                       <text x="167" y="84" fontSize="10.5" fill="#e2e8f0" fontFamily="JetBrains Mono">4A</text>
                       <circle cx="130" cy="56" r="4" fill="#facc15" />
@@ -588,7 +592,7 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
                         <button
                           key={opt}
                           className={cls}
-                          onClick={() => setQuizAnswers((prev) => ({ ...prev, [q.id]: idx }))}
+                          onClick={() => setQuizAnswers((prev) => ({ ...prev, [qKey]: idx }))}
                         >
                           <span className="opt-letter">{letter})</span>
                           <span>{opt}</span>
@@ -601,21 +605,19 @@ export const LabCompanionDrawer: React.FC<LabCompanionDrawerProps> = ({
               );
             })}
 
-            {/* High-Yield EC102 Viva Q&A */}
             <div className="viva-header">
-              <span>High-Yield Viva Q&A (Exp 2)</span>
-              <span className="mono-muted">{EXP2_VIVA_CARDS.length} cards</span>
+              <span>High-Yield Viva Q&A ({content.shortName})</span>
+              <span className="mono-muted">{content.viva.length} cards</span>
             </div>
 
-            {EXP2_VIVA_CARDS.map((card) => {
-              const expanded = !!openViva[card.id];
+            {content.viva.map((card) => {
+              const vKey = `${experimentId}-${card.id}`;
+              const expanded = !!openViva[vKey];
               return (
-                <div key={card.id} className="viva-card">
+                <div key={vKey} className="viva-card">
                   <button
                     className="viva-q-btn"
-                    onClick={() =>
-                      setOpenViva((prev) => ({ ...prev, [card.id]: !prev[card.id] }))
-                    }
+                    onClick={() => setOpenViva((prev) => ({ ...prev, [vKey]: !prev[vKey] }))}
                   >
                     <div className="viva-q-text">
                       <span className="viva-tag">{card.tag}</span>

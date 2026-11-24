@@ -1,11 +1,12 @@
 import React from 'react';
 import type { FgSettings, WaveformType } from '../../engine/types';
-import { EXP2_DEFAULT_FG } from '../../experiments/exp2Kirchhoff';
 import { Power, RotateCcw } from 'lucide-react';
 
 interface FunctionGeneratorProps {
   fg: FgSettings;
+  defaultLabel: string;
   onChange: (next: FgSettings) => void;
+  onResetDefault: () => void;
 }
 
 const WAVEFORMS: Array<{ id: WaveformType; label: string; path: string }> = [
@@ -18,7 +19,12 @@ const WAVEFORMS: Array<{ id: WaveformType; label: string; path: string }> = [
   { id: 'square', label: 'Square', path: 'M 2 18 L 2 6 L 12 6 L 12 18 L 22 18 L 22 6' },
 ];
 
-export const FunctionGenerator: React.FC<FunctionGeneratorProps> = ({ fg, onChange }) => {
+export const FunctionGenerator: React.FC<FunctionGeneratorProps> = ({
+  fg,
+  defaultLabel,
+  onChange,
+  onResetDefault,
+}) => {
   const vmin = fg.enabled ? fg.offset - fg.vpp / 2 : 0;
   const vmax = fg.enabled ? fg.offset + fg.vpp / 2 : 0;
 
@@ -41,11 +47,11 @@ export const FunctionGenerator: React.FC<FunctionGeneratorProps> = ({ fg, onChan
         <div className="fg-header-actions">
           <button
             className="btn-ghost btn-sm"
-            onClick={() => onChange({ ...EXP2_DEFAULT_FG })}
-            title="Reset to Exp 2 exact settings (1 kHz Triangle, 5 Vpp, +2.5 V offset)"
+            onClick={onResetDefault}
+            title={`Reset FG to ${defaultLabel} settings`}
           >
             <RotateCcw size={13} />
-            <span>Exp 2 Default</span>
+            <span>{defaultLabel}</span>
           </button>
           <button
             className={`power-btn ${fg.enabled ? 'on' : 'off'}`}
@@ -58,7 +64,6 @@ export const FunctionGenerator: React.FC<FunctionGeneratorProps> = ({ fg, onChan
       </div>
 
       <div className="fg-controls">
-        {/* Waveform selector */}
         <div className="fg-field">
           <span className="fg-label">Waveform</span>
           <div className="seg-group">
@@ -83,9 +88,8 @@ export const FunctionGenerator: React.FC<FunctionGeneratorProps> = ({ fg, onChan
           </div>
         </div>
 
-        {/* Frequency */}
         <label className="fg-field">
-          <span className="fg-label">Frequency (Hz)</span>
+          <span className="fg-label">Frequency</span>
           <div className="num-control">
             <input
               type="number"
@@ -102,9 +106,8 @@ export const FunctionGenerator: React.FC<FunctionGeneratorProps> = ({ fg, onChan
           </div>
         </label>
 
-        {/* Amplitude Vpp */}
         <label className="fg-field">
-          <span className="fg-label">Amplitude (Vpp)</span>
+          <span className="fg-label">Amplitude</span>
           <div className="num-control">
             <input
               type="number"
@@ -121,7 +124,6 @@ export const FunctionGenerator: React.FC<FunctionGeneratorProps> = ({ fg, onChan
           </div>
         </label>
 
-        {/* DC Offset */}
         <label className="fg-field">
           <span className="fg-label">DC Offset</span>
           <div className="num-control">

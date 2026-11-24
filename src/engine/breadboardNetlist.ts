@@ -11,9 +11,7 @@ export interface HoleMeta {
   section: 'tp' | 'tn' | 'top' | 'bot' | 'bp' | 'bn';
   rowLabel: string;
   col: number;
-  /** Internal strip key: holes sharing a stripKey are physically connected inside the breadboard */
   stripKey: string;
-  /** SVG coordinates (px) */
   x: number;
   y: number;
 }
@@ -42,20 +40,15 @@ export const BB_LAYOUT = {
   },
 } as const;
 
-// Adjust board height to fit bottom rails comfortably
 export const BB_VIEWBOX = {
   width: 980,
   height: 392,
 } as const;
 
-/**
- * Compute X position for a power rail hole (1..25), grouped in 5 blocks of 5
- * just like a physical half-size / 30-column breadboard.
- */
 function railHoleX(index1Based: number): number {
   const zero = index1Based - 1;
-  const group = Math.floor(zero / 5); // 0..4
-  const inGroup = zero % 5; // 0..4
+  const group = Math.floor(zero / 5);
+  const inGroup = zero % 5;
   const startCol = 2 + group * 5.8 + inGroup * 1.0;
   return BB_LAYOUT.padX + startCol * BB_LAYOUT.colPitch;
 }
@@ -185,7 +178,7 @@ class UnionFind {
 export interface ResolvedNetlist {
   holeToNet: Record<HoleId, number>;
   stripToNet: Record<string, number>;
-  netCount: number; // number of non-ground nets (1..netCount); 0 is GND
+  netCount: number;
   gndNet: number;
   activeComponents: Array<{
     component: CircuitComponent;
@@ -199,6 +192,9 @@ export interface ResolvedNetlist {
     ch1Gnd: number | null;
     ch2Pos: number | null;
     ch2Gnd: number | null;
+    rpsPos: number | null;
+    rpsCom: number | null;
+    rpsNeg: number | null;
   };
 }
 
@@ -208,12 +204,10 @@ export function resolveBreadboardNetlist(
 ): ResolvedNetlist {
   const uf = new UnionFind();
 
-  // Register all internal strips
   for (const stripKey of Object.keys(STRIP_TO_HOLES)) {
     uf.find(stripKey);
   }
 
-  // Merge strips connected by jumper wires
   for (const comp of components) {
     if (comp.type !== 'wire') continue;
     const h1 = HOLE_MAP[comp.pin1];
@@ -223,14 +217,14 @@ export function resolveBreadboardNetlist(
     }
   }
 
-  // Determine ground strip root: prefer fgGnd, else ch1Gnd, else bn rail
+  // Reference ground: prefer fgGnd, else rpsCom, else ch1Gnd, else bn1
   const gndHole =
     (probes.fgGnd && HOLE_MAP[probes.fgGnd]) ||
+    (probes.rpsCom && HOLE_MAP[probes.rpsCom]) ||
     (probes.ch1Gnd && HOLE_MAP[probes.ch1Gnd]) ||
     HOLE_MAP['bn1'];
   const gndRoot = uf.find(gndHole.stripKey);
 
-  // Assign integer net IDs only to strips that participate in active components or probes
   const usedRoots = new Set<string>([gndRoot]);
   const probeHoleList = Object.values(probes).filter(Boolean) as HoleId[];
   for (const pid of probeHoleList) {
@@ -274,7 +268,7 @@ export function resolveBreadboardNetlist(
     }
   }
 
-  const lookupProbe = (hid: HoleId | null): number | null => {
+  const lookupProbe = (hid: HoleId | null | undefined): number | null => {
     if (!hid || holeToNet[hid] === undefined || holeToNet[hid] < 0) return null;
     return holeToNet[hid];
   };
@@ -292,14 +286,13 @@ export function resolveBreadboardNetlist(
       ch1Gnd: lookupProbe(probes.ch1Gnd),
       ch2Pos: lookupProbe(probes.ch2Pos),
       ch2Gnd: lookupProbe(probes.ch2Gnd),
+      rpsPos: lookupProbe(probes.rpsPos),
+      rpsCom: lookupProbe(probes.rpsCom),
+      rpsNeg: lookupProbe(probes.rpsNeg),
     },
   };
 }
 
-/**
- * Returns all holes directly in the same physical breadboard strip,
- * plus all holes electrically tied via jumper wires.
- */
 export function getHoleHighlightSets(
   holeId: HoleId,
   components: CircuitComponent[]

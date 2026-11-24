@@ -13,12 +13,12 @@ import type {
   CircuitComponent,
   ComponentType,
   HoleId,
+  NodeMarker,
   ProbeId,
   ProbeMap,
   SimulationResult,
   WireColor,
 } from '../../engine/types';
-import { EXP2_NODE_MARKERS } from '../../experiments/exp2Kirchhoff';
 import {
   WIRE_COLOR_HEX,
   formatCapacitance,
@@ -42,12 +42,14 @@ interface BreadboardProps {
   components: CircuitComponent[];
   probes: ProbeMap;
   simulation: SimulationResult;
-  detectedNodes?: { gnd: number; a?: number; b?: number; c?: number; d?: number };
+  nodeMarkers: NodeMarker[];
+  detectedNodes?: { gnd: number; a?: number; b?: number; c?: number; d?: number; vo?: number };
+  showRpsProbes?: boolean;
+  experimentControls?: React.ReactNode;
   onAddComponent: (comp: Omit<CircuitComponent, 'id'>) => void;
   onUpdateComponent: (id: string, patch: Partial<CircuitComponent>) => void;
   onDeleteComponent: (id: string) => void;
   onMoveProbe: (probeId: ProbeId, hole: HoleId) => void;
-  onQuickProbeCh2: (node: 'b' | 'c' | 'd') => void;
 }
 
 const PROBE_META: Record<
@@ -60,6 +62,9 @@ const PROBE_META: Record<
   ch1Gnd: { label: 'CH1 GND', short: 'C1−', color: '#334155', stroke: '#facc15', textColor: '#fef08a' },
   ch2Pos: { label: 'CH2 (+)', short: 'CH2', color: '#22d3ee', stroke: '#a5f3fc', textColor: '#0f172a' },
   ch2Gnd: { label: 'CH2 GND', short: 'C2−', color: '#334155', stroke: '#22d3ee', textColor: '#a5f3fc' },
+  rpsPos: { label: 'RPS +VD1', short: '+VD1', color: '#dc2626', stroke: '#fca5a5', textColor: '#fff' },
+  rpsCom: { label: 'RPS COM', short: 'COM', color: '#0f172a', stroke: '#e2e8f0', textColor: '#f8fafc' },
+  rpsNeg: { label: 'RPS −VD2', short: '−VD2', color: '#2563eb', stroke: '#93c5fd', textColor: '#fff' },
 };
 
 const WIRE_COLORS: WireColor[] = [
@@ -87,12 +92,14 @@ export const Breadboard: React.FC<BreadboardProps> = ({
   components,
   probes,
   simulation,
+  nodeMarkers,
   detectedNodes,
+  showRpsProbes = false,
+  experimentControls,
   onAddComponent,
   onUpdateComponent,
   onDeleteComponent,
   onMoveProbe,
-  onQuickProbeCh2,
 }) => {
   const [tool, setTool] = useState<BoardTool>('select');
   const [wireColor, setWireColor] = useState<WireColor>('black');
@@ -105,7 +112,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     [components, selectedId]
   );
 
-  // Escape cancels placement; Delete/Backspace deletes selected component
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (
@@ -144,13 +150,11 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     }
 
     if (tool === 'select') {
-      // If clicking a hole with a component pin, select that component
       const hit = components.find((c) => c.pin1 === holeId || c.pin2 === holeId);
       setSelectedId(hit ? hit.id : null);
       return;
     }
 
-    // Placing a 2-pin component or wire
     if (!pendingPin1) {
       setPendingPin1(holeId);
       return;
@@ -163,7 +167,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
 
     const compType = tool as ComponentType;
     const defaultValue =
-      compType === 'resistor' ? 1000 : compType === 'capacitor' ? 0.1e-6 : 0;
+      compType === 'resistor' ? 1000 : compType === 'capacitor' ? 0.01e-6 : 0;
 
     onAddComponent({
       type: compType,
@@ -177,18 +181,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     setPendingPin1(null);
   };
 
-  // Detect which Exp 2 node CH2 is currently probing
-  const activeCh2Node = useMemo<'b' | 'c' | 'd' | null>(() => {
-    if (!probes.ch2Pos || !detectedNodes) return null;
-    const net = simulation.holeToNet[probes.ch2Pos];
-    if (net === undefined || net < 0) return null;
-    if (detectedNodes.b !== undefined && net === detectedNodes.b) return 'b';
-    if (detectedNodes.c !== undefined && net === detectedNodes.c) return 'c';
-    if (detectedNodes.d !== undefined && net === detectedNodes.d) return 'd';
-    return null;
-  }, [probes.ch2Pos, detectedNodes, simulation.holeToNet]);
-
-  // Hovered hole info for live Tinkercad status strip
   const hoveredInfo = useMemo(() => {
     if (!hoveredHole) return null;
     const meta = HOLE_MAP[hoveredHole];
@@ -197,10 +189,11 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     let nodeTag = '';
     if (detectedNodes && net !== undefined && net >= 0) {
       if (net === detectedNodes.gnd) nodeTag = 'GND Bus';
-      else if (net === detectedNodes.a) nodeTag = 'Node a (va)';
-      else if (net === detectedNodes.b) nodeTag = 'Node b';
-      else if (net === detectedNodes.c) nodeTag = 'Node c (KCL)';
-      else if (net === detectedNodes.d) nodeTag = 'Node d';
+      else if (detectedNodes.a !== undefined && net === detectedNodes.a) nodeTag = 'Input Node';
+      else if (detectedNodes.b !== undefined && net === detectedNodes.b) nodeTag = 'Node b';
+      else if (detectedNodes.c !== undefined && net === detectedNodes.c) nodeTag = 'Node c (KCL)';
+      else if (detectedNodes.d !== undefined && net === detectedNodes.d) nodeTag = 'Node d';
+      else if (detectedNodes.vo !== undefined && net === detectedNodes.vo) nodeTag = 'Output vo';
     }
     const wave = net !== undefined && net >= 0 ? simulation.nodeVoltages[net] : undefined;
     let vRange = '';
@@ -215,7 +208,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     }
     return {
       hole: hoveredHole,
-      strip: meta.stripKey,
       net: net !== undefined && net >= 0 ? `Net ${net}` : 'Unwired',
       nodeTag,
       vRange,
@@ -234,6 +226,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     const midX = (p1.x + p2.x) / 2;
     const midY = (p1.y + p2.y) / 2;
     const isSelected = !isGhost && selectedId === comp.id;
+    const isVertical = Math.abs(dy) > Math.abs(dx);
 
     const commonProps = isGhost
       ? { opacity: 0.65, pointerEvents: 'none' as const }
@@ -249,12 +242,11 @@ export const Breadboard: React.FC<BreadboardProps> = ({
 
     if (comp.type === 'wire') {
       const hex = WIRE_COLOR_HEX[comp.color ?? 'black'] ?? '#1e293b';
-      // Slight perpendicular bow for organic jumper wire look
-      const bow = Math.min(26, Math.max(10, len * 0.14));
+      const bow = Math.min(24, Math.max(8, len * 0.12));
       const nx = len > 0 ? -dy / len : 0;
       const ny = len > 0 ? dx / len : -1;
-      const cx = midX + nx * bow * 0.5;
-      const cy = midY + ny * bow * 0.5;
+      const cx = midX + nx * bow * 0.45;
+      const cy = midY + ny * bow * 0.45;
       const dPath = `M ${p1.x} ${p1.y} Q ${cx} ${cy} ${p2.x} ${p2.y}`;
 
       return (
@@ -263,23 +255,23 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             <path d={dPath} fill="none" stroke="#38bdf8" strokeWidth={9} strokeLinecap="round" opacity={0.55} />
           )}
           <path d={dPath} fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={6} strokeLinecap="round" transform="translate(1,2)" />
-          <path d={dPath} fill="none" stroke={hex} strokeWidth={4.6} strokeLinecap="round" />
+          <path d={dPath} fill="none" stroke={hex} strokeWidth={4.5} strokeLinecap="round" />
           <path d={dPath} fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth={1.3} strokeLinecap="round" />
-          <circle cx={p1.x} cy={p1.y} r={3.6} fill="#cbd5e1" stroke="#334155" strokeWidth={1.1} />
-          <circle cx={p2.x} cy={p2.y} r={3.6} fill="#cbd5e1" stroke="#334155" strokeWidth={1.1} />
+          <circle cx={p1.x} cy={p1.y} r={3.5} fill="#cbd5e1" stroke="#334155" strokeWidth={1.1} />
+          <circle cx={p2.x} cy={p2.y} r={3.5} fill="#cbd5e1" stroke="#334155" strokeWidth={1.1} />
         </g>
       );
     }
 
     if (comp.type === 'resistor') {
       const bands = getResistorBands(comp.value);
-      const bodyLen = Math.min(46, Math.max(26, len * 0.54));
+      const bodyLen = Math.min(44, Math.max(24, len * 0.52));
       const bodyH = 14;
+      const txt = `${comp.label} ${formatResistance(comp.value)}`;
+      const pillW = Math.max(54, txt.length * 5.6 + 10);
       return (
         <g key={comp.id} {...commonProps}>
-          {/* Shadow */}
           <line x1={p1.x} y1={p1.y + 2} x2={p2.x} y2={p2.y + 2} stroke="rgba(0,0,0,0.25)" strokeWidth={4} />
-          {/* Metal wire leads */}
           <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#94a3b8" strokeWidth={3} strokeLinecap="round" />
           <circle cx={p1.x} cy={p1.y} r={3.4} fill="#e2e8f0" stroke="#475569" strokeWidth={1} />
           <circle cx={p2.x} cy={p2.y} r={3.4} fill="#e2e8f0" stroke="#475569" strokeWidth={1} />
@@ -296,7 +288,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                 strokeWidth={2.2}
               />
             )}
-            {/* 1% Metal-film blue-cyan body */}
             <rect
               x={-bodyLen / 2}
               y={-bodyH / 2}
@@ -307,12 +298,10 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               stroke="#1e40af"
               strokeWidth={1.1}
             />
-            {/* Color bands */}
-            <rect x={-bodyLen * 0.34} y={-bodyH / 2 + 0.6} width={3.6} height={bodyH - 1.2} fill={bands[0]} />
-            <rect x={-bodyLen * 0.14} y={-bodyH / 2 + 0.6} width={3.6} height={bodyH - 1.2} fill={bands[1]} />
-            <rect x={bodyLen * 0.06} y={-bodyH / 2 + 0.6} width={3.6} height={bodyH - 1.2} fill={bands[2]} />
-            <rect x={bodyLen * 0.27} y={-bodyH / 2 + 0.6} width={3.2} height={bodyH - 1.2} fill={bands[3]} />
-            {/* Specular highlight */}
+            <rect x={-bodyLen * 0.34} y={-bodyH / 2 + 0.6} width={3.5} height={bodyH - 1.2} fill={bands[0]} />
+            <rect x={-bodyLen * 0.14} y={-bodyH / 2 + 0.6} width={3.5} height={bodyH - 1.2} fill={bands[1]} />
+            <rect x={bodyLen * 0.06} y={-bodyH / 2 + 0.6} width={3.5} height={bodyH - 1.2} fill={bands[2]} />
+            <rect x={bodyLen * 0.27} y={-bodyH / 2 + 0.6} width={3.1} height={bodyH - 1.2} fill={bands[3]} />
             <rect
               x={-bodyLen / 2 + 2}
               y={-bodyH / 2 + 1.5}
@@ -322,29 +311,28 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               fill="rgba(255,255,255,0.32)"
             />
           </g>
-          {/* Floating crisp label */}
           {!isGhost && (
-            <g transform={`translate(${midX}, ${midY - (Math.abs(dy) > Math.abs(dx) ? 0 : 14)})`}>
+            <g transform={`translate(${midX}, ${midY - (isVertical ? 0 : 14)})`}>
               <rect
-                x={Math.abs(dy) > Math.abs(dx) ? 12 : -28}
+                x={isVertical ? 12 : -pillW / 2}
                 y={-9}
-                width={56}
+                width={pillW}
                 height={15}
                 rx={4}
-                fill="rgba(15,23,42,0.88)"
+                fill="rgba(15,23,42,0.9)"
                 stroke={isSelected ? '#38bdf8' : 'rgba(148,163,184,0.35)'}
                 strokeWidth={1}
               />
               <text
-                x={Math.abs(dy) > Math.abs(dx) ? 40 : 0}
+                x={isVertical ? 12 + pillW / 2 : 0}
                 y={2}
                 textAnchor="middle"
-                fontSize={9}
+                fontSize={8.8}
                 fontWeight={600}
                 fontFamily="JetBrains Mono, monospace"
                 fill="#f8fafc"
               >
-                {comp.label} {formatResistance(comp.value)}
+                {txt}
               </text>
             </g>
           )}
@@ -353,7 +341,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
     }
 
     if (comp.type === 'diode') {
-      const bodyLen = Math.min(44, Math.max(26, len * 0.5));
+      const bodyLen = Math.min(44, Math.max(24, len * 0.5));
       const bodyH = 15;
       return (
         <g key={comp.id} {...commonProps}>
@@ -374,7 +362,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                 strokeWidth={2.2}
               />
             )}
-            {/* Black DO-41 epoxy body */}
             <rect
               x={-bodyLen / 2}
               y={-bodyH / 2}
@@ -385,29 +372,13 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               stroke="#52525b"
               strokeWidth={1.1}
             />
-            {/* Silver Cathode Band near pin2 (+x side) */}
-            <rect
-              x={bodyLen / 2 - 10}
-              y={-bodyH / 2 + 0.6}
-              width={5.5}
-              height={bodyH - 1.2}
-              fill="#e2e8f0"
-            />
-            {/* Subtle arrow showing A -> K direction */}
-            <path d="M -9 -3.5 L -2 0 L -9 3.5 Z" fill="#94a3b8" opacity={0.85} />
-            <rect
-              x={-bodyLen / 2 + 2}
-              y={-bodyH / 2 + 1.5}
-              width={bodyLen - 4}
-              height={2.5}
-              rx={1}
-              fill="rgba(255,255,255,0.16)"
-            />
+            <rect x={bodyLen / 2 - 9} y={-bodyH / 2 + 0.6} width={5.2} height={bodyH - 1.2} fill="#e2e8f0" />
+            <path d="M -8 -3.5 L -1 0 L -8 3.5 Z" fill="#94a3b8" opacity={0.85} />
           </g>
           {!isGhost && (
-            <g transform={`translate(${midX}, ${midY - 15})`}>
+            <g transform={`translate(${midX}, ${midY - (isVertical ? 0 : 15)})`}>
               <rect
-                x={-36}
+                x={isVertical ? 12 : -36}
                 y={-9}
                 width={72}
                 height={15}
@@ -417,10 +388,10 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                 strokeWidth={1}
               />
               <text
-                x={0}
+                x={isVertical ? 48 : 0}
                 y={2}
                 textAnchor="middle"
-                fontSize={8.8}
+                fontSize={8.5}
                 fontWeight={600}
                 fontFamily="JetBrains Mono, monospace"
                 fill="#f8fafc"
@@ -433,9 +404,10 @@ export const Breadboard: React.FC<BreadboardProps> = ({
       );
     }
 
-    // Capacitor (polyester film box capacitor, 0.1 uF / "104")
     const capW = Math.min(34, Math.max(22, len * 0.36));
     const capH = 18;
+    const capTxt = `${comp.label} ${formatCapacitance(comp.value)}`;
+    const capPillW = Math.max(58, capTxt.length * 5.8 + 10);
     return (
       <g key={comp.id} {...commonProps}>
         <line x1={p1.x} y1={p1.y + 2} x2={p2.x} y2={p2.y + 2} stroke="rgba(0,0,0,0.28)" strokeWidth={4} />
@@ -455,58 +427,34 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               strokeWidth={2.2}
             />
           )}
-          <rect
-            x={-capW / 2}
-            y={-capH / 2}
-            width={capW}
-            height={capH}
-            rx={4}
-            fill="#d97706"
-            stroke="#92400e"
-            strokeWidth={1.3}
-          />
-          <rect
-            x={-capW / 2 + 2}
-            y={-capH / 2 + 2}
-            width={capW - 4}
-            height={capH - 4}
-            rx={2.5}
-            fill="#f59e0b"
-          />
-          <text
-            x={0}
-            y={3.5}
-            textAnchor="middle"
-            fontSize={9.5}
-            fontWeight={700}
-            fontFamily="JetBrains Mono, monospace"
-            fill="#451a03"
-          >
+          <rect x={-capW / 2} y={-capH / 2} width={capW} height={capH} rx={4} fill="#d97706" stroke="#92400e" strokeWidth={1.3} />
+          <rect x={-capW / 2 + 2} y={-capH / 2 + 2} width={capW - 4} height={capH - 4} rx={2.5} fill="#f59e0b" />
+          <text x={0} y={3.5} textAnchor="middle" fontSize={9.2} fontWeight={700} fontFamily="JetBrains Mono, monospace" fill="#451a03">
             {getCapacitorCode(comp.value)}
           </text>
         </g>
         {!isGhost && (
-          <g transform={`translate(${midX}, ${midY - 17})`}>
+          <g transform={`translate(${midX}, ${midY - (isVertical ? 0 : 17)})`}>
             <rect
-              x={-29}
+              x={isVertical ? 14 : -capPillW / 2}
               y={-9}
-              width={58}
+              width={capPillW}
               height={15}
               rx={4}
-              fill="rgba(15,23,42,0.88)"
+              fill="rgba(15,23,42,0.9)"
               stroke={isSelected ? '#38bdf8' : 'rgba(245,158,11,0.5)'}
               strokeWidth={1}
             />
             <text
-              x={0}
+              x={isVertical ? 14 + capPillW / 2 : 0}
               y={2}
               textAnchor="middle"
-              fontSize={9}
+              fontSize={8.8}
               fontWeight={600}
               fontFamily="JetBrains Mono, monospace"
               fill="#fde68a"
             >
-              {comp.label} {formatCapacitance(comp.value)}
+              {capTxt}
             </text>
           </g>
         )}
@@ -531,14 +479,18 @@ export const Breadboard: React.FC<BreadboardProps> = ({
       label: '',
       pin1: pendingPin1,
       pin2: hoveredHole,
-      value: compType === 'resistor' ? 1000 : compType === 'capacitor' ? 0.1e-6 : 0,
+      value: compType === 'resistor' ? 1000 : compType === 'capacitor' ? 0.01e-6 : 0,
       color: compType === 'wire' ? wireColor : undefined,
     };
   }, [pendingPin1, hoveredHole, tool, wireColor]);
 
+  const placeableProbes: ProbeId[] = showRpsProbes
+    ? ['fgPos', 'ch1Pos', 'ch2Pos', 'rpsPos', 'rpsNeg', 'fgGnd']
+    : ['fgPos', 'ch1Pos', 'ch2Pos', 'fgGnd'];
+
   return (
     <div className="panel breadboard-panel">
-      {/* Component Palette & Probe Quick Bar */}
+      {/* Component Palette & Probe Bar */}
       <div className="bb-toolbar">
         <div className="bb-tool-group" role="toolbar" aria-label="Breadboard components">
           <button
@@ -558,7 +510,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               setTool('resistor');
               setPendingPin1(null);
             }}
-            title="Place 1.00 kΩ Resistor (click 2 holes)"
+            title="Place Resistor (click 2 holes)"
           >
             <span className="tool-chip resistor-chip" />
             <span>Resistor</span>
@@ -569,7 +521,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               setTool('diode');
               setPendingPin1(null);
             }}
-            title="Place 1N4007 Diode (click Anode hole → Cathode hole)"
+            title="Place 1N4007 Diode (Anode → Cathode)"
           >
             <span className="tool-chip diode-chip" />
             <span>1N4007</span>
@@ -580,10 +532,10 @@ export const Breadboard: React.FC<BreadboardProps> = ({
               setTool('capacitor');
               setPendingPin1(null);
             }}
-            title="Place 0.1 µF Capacitor (click 2 holes)"
+            title="Place Capacitor (click 2 holes)"
           >
             <span className="tool-chip cap-chip" />
-            <span>0.1 µF</span>
+            <span>Cap</span>
           </button>
           <button
             className={`tool-btn ${tool === 'wire' ? 'active' : ''}`}
@@ -612,21 +564,8 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           )}
         </div>
 
-        {/* BNC Probe Placement & Quick CH2 Switching */}
         <div className="bb-probe-group">
-          <span className="probe-group-label">CH2 Probe:</span>
-          {(['b', 'c', 'd'] as const).map((nodeKey) => (
-            <button
-              key={nodeKey}
-              className={`quick-node-btn ${activeCh2Node === nodeKey ? 'active' : ''}`}
-              onClick={() => onQuickProbeCh2(nodeKey)}
-              title={`Clip DSO Channel 2 directly to Node ${nodeKey}`}
-            >
-              Node {nodeKey}
-            </button>
-          ))}
-          <div className="probe-divider" />
-          {(['fgPos', 'ch1Pos', 'ch2Pos', 'fgGnd'] as ProbeId[]).map((pid) => {
+          {placeableProbes.map((pid) => {
             const meta = PROBE_META[pid];
             const active = tool === `probe:${pid}`;
             return (
@@ -641,7 +580,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                   setTool(active ? 'select' : `probe:${pid}`);
                   setPendingPin1(null);
                 }}
-                title={`Click any breadboard hole to move ${meta.label} (currently ${probes[pid] ?? 'unconnected'})`}
+                title={`Click any hole to move ${meta.label} (${probes[pid] ?? 'unconnected'})`}
               >
                 <span className="probe-dot" style={{ background: meta.color }} />
                 <span>{meta.short}</span>
@@ -650,6 +589,9 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           })}
         </div>
       </div>
+
+      {/* Experiment-Specific Quick Controls Bar (e.g. CH2 Node b/c/d, Exp 3 Variants, Exp 4 Loads, Exp 5 Freqs) */}
+      {experimentControls && <div className="bb-exp-bar">{experimentControls}</div>}
 
       {/* Placement Hint Strip */}
       <div className="bb-status-bar">
@@ -663,15 +605,14 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             <span className="hint-active">
               <Cpu size={13} />{' '}
               {pendingPin1
-                ? `Pin 1 set at ${pendingPin1.toUpperCase()} — click a second hole to finish ${tool === 'diode' ? 'Cathode (K)' : tool}`
+                ? `Pin 1 set at ${pendingPin1.toUpperCase()} — click Pin 2 to finish ${tool === 'diode' ? 'Cathode (K)' : tool}`
                 : tool === 'diode'
                   ? 'Click Anode (A) hole first, then Cathode (K) hole'
                   : `Click Pin 1 hole, then Pin 2 hole to place ${tool}`}
             </span>
           ) : (
             <span>
-              Hover any hole to trace internal strips · Click a component to edit/flip/delete · Or
-              pick a part above to wire freely
+              Hover any hole to trace strips · Click any part to edit value / flip polarity / delete
             </span>
           )}
         </div>
@@ -690,7 +631,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
         </div>
       </div>
 
-      {/* Main SVG Interactive Breadboard */}
+      {/* Interactive SVG Breadboard */}
       <div className="bb-canvas-wrap">
         <svg
           className="bb-svg"
@@ -699,7 +640,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             if (tool === 'select') setSelectedId(null);
           }}
         >
-          {/* Breadboard Plastic Body */}
           <rect
             x={8}
             y={8}
@@ -710,7 +650,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             stroke="#c7beab"
             strokeWidth={2.5}
           />
-          {/* Subtle inner mold recess */}
           <rect
             x={16}
             y={15}
@@ -722,7 +661,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             strokeWidth={1.2}
           />
 
-          {/* Top Power Rail Painted Stripes */}
+          {/* Top Power Rails */}
           <line x1={46} y1={19} x2={BB_VIEWBOX.width - 46} y2={19} stroke="#dc2626" strokeWidth={2.2} opacity={0.85} />
           <line x1={46} y1={60} x2={BB_VIEWBOX.width - 46} y2={60} stroke="#2563eb" strokeWidth={2.2} opacity={0.85} />
           <text x={30} y={32} fontSize={13} fontWeight={700} fill="#dc2626" fontFamily="JetBrains Mono, monospace">+</text>
@@ -730,7 +669,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           <text x={BB_VIEWBOX.width - 36} y={32} fontSize={13} fontWeight={700} fill="#dc2626" fontFamily="JetBrains Mono, monospace">+</text>
           <text x={BB_VIEWBOX.width - 36} y={54} fontSize={14} fontWeight={700} fill="#2563eb" fontFamily="JetBrains Mono, monospace">−</text>
 
-          {/* Bottom Power Rail Painted Stripes */}
+          {/* Bottom Power Rails */}
           <line x1={46} y1={331} x2={BB_VIEWBOX.width - 46} y2={331} stroke="#dc2626" strokeWidth={2.2} opacity={0.85} />
           <line x1={46} y1={372} x2={BB_VIEWBOX.width - 46} y2={372} stroke="#2563eb" strokeWidth={2.2} opacity={0.85} />
           <text x={30} y={344} fontSize={13} fontWeight={700} fill="#dc2626" fontFamily="JetBrains Mono, monospace">+</text>
@@ -738,7 +677,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
           <text x={BB_VIEWBOX.width - 36} y={344} fontSize={13} fontWeight={700} fill="#dc2626" fontFamily="JetBrains Mono, monospace">+</text>
           <text x={BB_VIEWBOX.width - 36} y={366} fontSize={14} fontWeight={700} fill="#2563eb" fontFamily="JetBrains Mono, monospace">−</text>
 
-          {/* Bottom GND Bus Subtle Label */}
           <text
             x={BB_VIEWBOX.width / 2}
             y={383}
@@ -749,10 +687,10 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             fill="#475569"
             fontFamily="JetBrains Mono, monospace"
           >
-            GND BUS (COMMON REFERENCE NODE 0)
+            GND / COM BUS (COMMON REFERENCE NODE 0)
           </text>
 
-          {/* Center IC DIP Trench */}
+          {/* Center IC Trench */}
           <rect
             x={36}
             y={188}
@@ -764,83 +702,55 @@ export const Breadboard: React.FC<BreadboardProps> = ({
             strokeWidth={1}
           />
 
-          {/* Column Numbers (1..30, every column subtle, multiples of 5 bold) */}
+          {/* Column Numbers */}
           {Array.from({ length: BB_COLS }, (_, idx) => {
             const col = idx + 1;
             const x = BB_LAYOUT.padX + idx * BB_LAYOUT.colPitch;
             const major = col === 1 || col % 5 === 0;
             return (
               <g key={`col-${col}`}>
-                <text
-                  x={x}
-                  y={74}
-                  textAnchor="middle"
-                  fontSize={major ? 9.5 : 8}
-                  fontWeight={major ? 700 : 500}
-                  fill={major ? '#475569' : '#94a3b8'}
-                  fontFamily="JetBrains Mono, monospace"
-                >
+                <text x={x} y={74} textAnchor="middle" fontSize={major ? 9.5 : 8} fontWeight={major ? 700 : 500} fill={major ? '#475569' : '#94a3b8'} fontFamily="JetBrains Mono, monospace">
                   {col}
                 </text>
-                <text
-                  x={x}
-                  y={322}
-                  textAnchor="middle"
-                  fontSize={major ? 9.5 : 8}
-                  fontWeight={major ? 700 : 500}
-                  fill={major ? '#475569' : '#94a3b8'}
-                  fontFamily="JetBrains Mono, monospace"
-                >
+                <text x={x} y={322} textAnchor="middle" fontSize={major ? 9.5 : 8} fontWeight={major ? 700 : 500} fill={major ? '#475569' : '#94a3b8'} fontFamily="JetBrains Mono, monospace">
                   {col}
                 </text>
               </g>
             );
           })}
 
-          {/* Row Labels a-e and f-j */}
+          {/* Row Labels */}
           {TOP_ROWS.map((r) => (
             <g key={`row-${r}`}>
-              <text x={28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">
-                {r}
-              </text>
-              <text x={BB_VIEWBOX.width - 28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">
-                {r}
-              </text>
+              <text x={28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
+              <text x={BB_VIEWBOX.width - 28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
             </g>
           ))}
           {BOT_ROWS.map((r) => (
             <g key={`row-${r}`}>
-              <text x={28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">
-                {r}
-              </text>
-              <text x={BB_VIEWBOX.width - 28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">
-                {r}
-              </text>
+              <text x={28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
+              <text x={BB_VIEWBOX.width - 28} y={BB_LAYOUT.rowY[r] + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#64748b" fontFamily="JetBrains Mono, monospace">{r}</text>
             </g>
           ))}
 
-          {/* Node Reference Badges for Exp 2 preset columns (a, b, c, d) */}
-          {EXP2_NODE_MARKERS.map((nm) => {
+          {/* Dynamic Experiment Node Badges */}
+          {nodeMarkers.map((nm) => {
             const hole = HOLE_MAP[nm.hole];
             if (!hole || !detectedNodes) return null;
-            const expectedNet =
-              nm.label === 'a'
-                ? detectedNodes.a
-                : nm.label === 'b'
-                  ? detectedNodes.b
-                  : nm.label === 'c'
-                    ? detectedNodes.c
-                    : detectedNodes.d;
+            const key = nm.netKey ?? (nm.label as 'a' | 'b' | 'c' | 'd' | 'vo');
+            const expectedNet = detectedNodes[key];
             if (expectedNet === undefined || simulation.holeToNet[nm.hole] !== expectedNet) {
               return null;
             }
-            const isProbed = activeCh2Node === nm.label;
+            const ch2Net = probes.ch2Pos ? simulation.holeToNet[probes.ch2Pos] : -2;
+            const isProbed = ch2Net === expectedNet;
+            const w = Math.max(30, nm.label.length * 7 + 16);
             return (
-              <g key={`nm-${nm.label}`} transform={`translate(${hole.x}, 63)`}>
+              <g key={`nm-${nm.label}-${nm.col}`} transform={`translate(${hole.x}, 63)`}>
                 <rect
-                  x={-16}
+                  x={-w / 2}
                   y={-9}
-                  width={32}
+                  width={w}
                   height={14}
                   rx={7}
                   fill={isProbed ? '#06b6d4' : '#0f172a'}
@@ -880,7 +790,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                   handleHoleClick(h.id);
                 }}
               >
-                {/* Highlight Ring (Tinkercad green/cyan strip trace) */}
                 {(isStripHL || isWireHL || isPending) && (
                   <circle
                     cx={h.x}
@@ -893,13 +802,10 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                           ? 'rgba(16,185,129,0.3)'
                           : 'rgba(56,189,248,0.28)'
                     }
-                    stroke={
-                      isPending ? '#f97316' : isStripHL ? '#10b981' : '#38bdf8'
-                    }
+                    stroke={isPending ? '#f97316' : isStripHL ? '#10b981' : '#38bdf8'}
                     strokeWidth={1.6}
                   />
                 )}
-                {/* Recessed square socket */}
                 <rect
                   x={h.x - 4.4}
                   y={h.y - 4.4}
@@ -910,31 +816,28 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                   stroke="#a8a29e"
                   strokeWidth={0.9}
                 />
-                {/* Invisible generous click hitbox */}
                 <circle cx={h.x} cy={h.y} r={10} fill="transparent" />
               </g>
             );
           })}
 
-          {/* Wires rendered beneath body components for clean layering */}
           {components.filter((c) => c.type === 'wire').map((c) => renderComponentSvg(c))}
-
-          {/* Active components (Resistors, Diode, Capacitor) */}
           {components.filter((c) => c.type !== 'wire').map((c) => renderComponentSvg(c))}
-
-          {/* Ghost Preview while placing */}
           {ghostComp && renderComponentSvg(ghostComp, true)}
 
-          {/* BNC Instrument Probe Clips */}
+          {/* BNC & RPS Probe Clips */}
           {(Object.keys(PROBE_META) as ProbeId[]).map((pid) => {
             const holeId = probes[pid];
             if (!holeId) return null;
             const h = HOLE_MAP[holeId];
             if (!h) return null;
             const meta = PROBE_META[pid];
-            const placeBelow = h.section === 'bn' || h.section === 'bp' || h.rowLabel === 'e';
-            const badgeY = placeBelow ? h.y + 18 : h.y - 18;
+            const placeBelow =
+              h.section === 'bn' || h.section === 'bp' || h.section === 'tn' || h.rowLabel === 'e';
+            const badgeY =
+              h.section === 'tp' ? h.y - 16 : placeBelow ? h.y + 18 : h.y - 18;
             const active = tool === `probe:${pid}`;
+            const tagW = Math.max(32, meta.short.length * 6.2 + 10);
 
             return (
               <g
@@ -946,12 +849,11 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                   setPendingPin1(null);
                 }}
               >
-                {/* Probe pin & collar */}
                 <line
                   x1={h.x}
                   y1={h.y}
                   x2={h.x}
-                  y2={placeBelow ? h.y + 11 : h.y - 11}
+                  y2={badgeY > h.y ? h.y + 11 : h.y - 11}
                   stroke={meta.color}
                   strokeWidth={2.5}
                 />
@@ -964,12 +866,11 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                   strokeWidth={active ? 2.4 : 1.5}
                 />
                 <circle cx={h.x} cy={h.y} r={2} fill="#0f172a" />
-                {/* Crisp Probe Tag */}
                 <g transform={`translate(${h.x}, ${badgeY})`}>
                   <rect
-                    x={-16}
+                    x={-tagW / 2}
                     y={-8}
-                    width={32}
+                    width={tagW}
                     height={15}
                     rx={4}
                     fill={meta.color}
@@ -980,7 +881,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                     x={0}
                     y={2.5}
                     textAnchor="middle"
-                    fontSize={8.5}
+                    fontSize={8.2}
                     fontWeight={800}
                     fontFamily="JetBrains Mono, monospace"
                     fill={meta.textColor}
@@ -1035,6 +936,7 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                   {[
                     { lbl: '1kΩ', val: 1000 },
                     { lbl: '10kΩ', val: 10000 },
+                    { lbl: '20kΩ', val: 20000 },
                     { lbl: '22kΩ', val: 22000 },
                     { lbl: '30kΩ', val: 30000 },
                   ].map((p) => (
@@ -1095,7 +997,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                     pin2: selectedComp.pin1,
                   })
                 }
-                title="Swap Anode and Cathode terminals"
               >
                 <ArrowLeftRight size={13} />
                 <span>Flip Polarity (A ↔ K)</span>
@@ -1122,7 +1023,6 @@ export const Breadboard: React.FC<BreadboardProps> = ({
                 onDeleteComponent(selectedComp.id);
                 setSelectedId(null);
               }}
-              title="Remove component (Delete)"
             >
               <Trash2 size={13} />
               <span>Delete</span>
